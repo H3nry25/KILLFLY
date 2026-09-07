@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -80,7 +81,15 @@ constructor(
     fun syncLikedSongs() {
         viewModelScope.launch(Dispatchers.IO) {
             syncUtils.syncLikedSongs()
-            syncUtils.syncSpotifyLikedSongs()
+            // Clean up any songs in local likes that have a Spotify match
+            val songsToClean = database.likedSongsByNameAsc().first()
+            database.transaction {
+                songsToClean.forEach { song ->
+                    if (database.getSpotifyMatchByYouTubeId(song.id) != null) {
+                        database.update(song.song.copy(liked = false, likedDate = null))
+                    }
+                }
+            }
         }
     }
 
@@ -94,7 +103,15 @@ constructor(
             when (playlist) {
                 "liked" -> {
                     syncUtils.syncLikedSongsSuspend()
-                    syncUtils.syncSpotifyLikedSongsSuspend()
+                    // Clean up any songs in local likes that have a Spotify match
+                    val songsToClean = database.likedSongsByNameAsc().first()
+                    database.transaction {
+                        songsToClean.forEach { song ->
+                            if (database.getSpotifyMatchByYouTubeId(song.id) != null) {
+                                database.update(song.song.copy(liked = false, likedDate = null))
+                            }
+                        }
+                    }
                 }
                 "uploaded" -> syncUtils.syncUploadedSongsSuspend()
             }

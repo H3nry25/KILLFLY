@@ -35,7 +35,7 @@ android {
         targetSdk = 36
         versionCode = 24
         versionName = "0.8.8"
-        resValue("string", "app_name", appNameOverride ?: "Meld")
+        resValue("string", "app_name", appNameOverride ?: "Zeusfly")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -124,6 +124,7 @@ android {
             ndk {
                 debugSymbolLevel = "NONE"
             }
+            signingConfig = signingConfigs.getByName("debug")
         }
         debug {
             if (applicationIdOverride == null) {
@@ -131,7 +132,7 @@ android {
             }
             isDebuggable = true
             if (appNameOverride == null) {
-                resValue("string", "app_name", "Meld Debug")
+                resValue("string", "app_name", "Zeusfly Debug")
             }
             signingConfig =
                 if (workflowDebugKeystoreFile != null) {
@@ -177,6 +178,7 @@ android {
         warningsAsErrors = false
         abortOnError = false
         checkDependencies = false
+        checkReleaseBuilds = false
     }
 
     androidResources {

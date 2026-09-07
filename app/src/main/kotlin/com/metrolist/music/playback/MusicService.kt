@@ -3240,6 +3240,7 @@ class MusicService :
 
         // Clear the cached URL
         songUrlCache.remove(mediaId)
+        bypassCacheForQualityChange.add(mediaId)
         Timber.tag(TAG).d("Cleared cached URL for $mediaId")
 
         // Clear decryption caches

@@ -17,11 +17,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -85,10 +88,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.metrolist.music.ui.component.AccountSettingsDialog
+import com.metrolist.music.BuildConfig
+import com.metrolist.music.constants.AppBarHeight
+import androidx.compose.ui.unit.LayoutDirection
 import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
@@ -701,6 +709,7 @@ fun HomeScreen(
     val accountImageUrl by viewModel.accountImageUrl.collectAsState()
     val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
     val (randomizeHomeOrder) = rememberPreference(RandomizeHomeOrderKey, true)
+    var showAccountDialog by remember { mutableStateOf(false) }
 
     val shouldShowWrappedCard by viewModel.showWrappedCard.collectAsState()
     val wrappedState by viewModel.wrappedManager.state.collectAsState()
@@ -711,6 +720,30 @@ fun HomeScreen(
             "SAPISID" in parseCookieString(innerTubeCookie)
         }
     val url = if (isLoggedIn) accountImageUrl else null
+
+    val gridItems = remember(accountPlaylists) {
+        val list = mutableListOf<GridPlaylistItem>()
+        list.add(
+            GridPlaylistItem(
+                id = "liked",
+                title = "Me gusta",
+                isLocalLikes = true
+            )
+        )
+        accountPlaylists?.distinctBy { it.id }
+            ?.filter { it.id != "LM" && !it.title.lowercase().contains("música que me gusta") && !it.title.lowercase().contains("music i like") }
+            ?.take(5)?.forEach { playlist ->
+                list.add(
+                    GridPlaylistItem(
+                        id = playlist.id,
+                        title = playlist.title,
+                        thumbnailUrl = playlist.thumbnail,
+                        isLocalLikes = false
+                    )
+                )
+            }
+        list
+    }
 
     // Extract unique podcasts from episodes for "Podcast Channels" row
     // Cache the podcasts to prevent them from disappearing during refresh
@@ -1206,10 +1239,149 @@ fun HomeScreen(
                     )
                 }
 
+            val playerAwarePadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
+            val customContentPadding = remember(playerAwarePadding) {
+                PaddingValues(
+                    start = playerAwarePadding.calculateStartPadding(LayoutDirection.Ltr),
+                    end = playerAwarePadding.calculateEndPadding(LayoutDirection.Ltr),
+                    top = (playerAwarePadding.calculateTopPadding() - AppBarHeight).coerceAtLeast(0.dp),
+                    bottom = playerAwarePadding.calculateBottomPadding()
+                )
+            }
+
             LazyColumn(
                 state = lazylistState,
-                contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+                contentPadding = customContentPadding,
             ) {
+                // 1. Dynamic Greeting Header (Buenos días / Buenas tardes / Buenas noches) & Actions
+                item(key = "home_top_header") {
+                    if (showAccountDialog) {
+                        AccountSettingsDialog(
+                            navController = navController,
+                            onDismiss = {
+                                showAccountDialog = false
+                                viewModel.refresh()
+                            },
+                            latestVersionName = BuildConfig.VERSION_NAME
+                        )
+                    }
+                    val greeting = remember {
+                        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                        when (hour) {
+                            in 6..12 -> "Buenos días"
+                            in 13..19 -> "Buenas tardes"
+                            else -> "Buenas noches"
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = greeting,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 1. Account Settings Toggler Icon
+                            androidx.compose.material3.IconButton(
+                                onClick = { showAccountDialog = true }
+                            ) {
+                                if (url != null) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(url)
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = "Account",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                    )
+                                } else {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.person),
+                                        contentDescription = "Account",
+                                        tint = MaterialTheme.colorScheme.onBackground,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                            }
+                            // 2. Settings Icon
+                            androidx.compose.material3.IconButton(
+                                onClick = { navController.navigate("settings") }
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.settings),
+                                    contentDescription = "Settings",
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            // 3. Playback History (Recent Songs) Icon
+                            androidx.compose.material3.IconButton(
+                                onClick = { navController.navigate("history") }
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.history),
+                                    contentDescription = "Recent Songs",
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 2. Playlists Grid (Me gusta & Recent user playlists in a 2-column layout)
+                item(key = "home_playlists_grid") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Chunk items into rows of 2
+                        gridItems.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowItems.forEach { item ->
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        HomeGridPlaylistItem(
+                                            title = item.title,
+                                            thumbnailUrl = item.thumbnailUrl,
+                                            isLocalLikes = item.isLocalLikes,
+                                            onClick = {
+                                                if (item.isLocalLikes) {
+                                                    navController.navigate("auto_playlist/liked")
+                                                } else {
+                                                    navigateToPlaylist(item.id)
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                // If the row has only 1 item, pad with an empty box
+                                if (rowItems.size < 2) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 item {
                     ChipsRow(
                         chips = homePage?.chips?.map { it to it.title } ?: emptyList(),
@@ -2871,6 +3043,103 @@ fun HomeScreen(
                 },
                 showRecognition = showRecognizeButton,
                 showMainAction = showPlayRandomButton,
+            )
+        }
+    }
+}
+
+private data class GridPlaylistItem(
+    val id: String,
+    val title: String,
+    val thumbnailUrl: String? = null,
+    val isLocalLikes: Boolean
+)
+
+@Composable
+private fun HomeGridPlaylistItem(
+    title: String,
+    thumbnailUrl: String?,
+    isLocalLikes: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Cover Art Box on the left
+            if (isLocalLikes) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFFE51C23),
+                                    Color(0xFFA01318)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.favorite),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            } else {
+                if (thumbnailUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(thumbnailUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(56.dp)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.music_note),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            // Playlist title
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
             )
         }
     }

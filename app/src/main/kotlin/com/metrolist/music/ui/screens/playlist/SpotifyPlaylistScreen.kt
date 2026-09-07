@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -52,10 +54,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import com.metrolist.music.ui.component.DefaultDialog
+import androidx.media3.exoplayer.offline.Download
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -114,6 +119,16 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import androidx.compose.material3.Surface
+import com.metrolist.music.ui.menu.SpotifyPlaylistMenu
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -158,6 +173,37 @@ fun SpotifyPlaylistScreen(
 
     val coroutineScope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState()
+    val downloadUtil = com.metrolist.music.LocalDownloadUtil.current
+    var downloadState by remember { mutableIntStateOf(Download.STATE_STOPPED) }
+    var showRemoveDownloadDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(tracks) {
+        if (tracks.isEmpty()) return@LaunchedEffect
+        downloadUtil.downloads.collect { downloads ->
+            val matchedYtIds = withContext(Dispatchers.IO) {
+                tracks.mapNotNull { track ->
+                    database.getSpotifyMatch(track.id)?.youtubeId
+                }
+            }
+            if (matchedYtIds.isEmpty()) {
+                downloadState = Download.STATE_STOPPED
+                return@collect
+            }
+            downloadState =
+                if (matchedYtIds.all { downloads[it]?.state == Download.STATE_COMPLETED }) {
+                    Download.STATE_COMPLETED
+                } else if (matchedYtIds.all {
+                        val state = downloads[it]?.state
+                        state == Download.STATE_QUEUED ||
+                                state == Download.STATE_DOWNLOADING ||
+                                state == Download.STATE_COMPLETED
+                    }) {
+                    Download.STATE_DOWNLOADING
+                } else {
+                    Download.STATE_STOPPED
+                }
+        }
+    }
     val pullRefreshState = rememberPullToRefreshState()
 
     val mapper = remember { SpotifyYouTubeMapper(database) }
@@ -257,6 +303,46 @@ fun SpotifyPlaylistScreen(
         query = TextFieldValue()
     }
 
+    if (showRemoveDownloadDialog) {
+        val name = playlist?.name ?: ""
+        DefaultDialog(
+            onDismiss = { showRemoveDownloadDialog = false },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_download_playlist_confirm, name),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                )
+            },
+            buttons = {
+                TextButton(
+                    onClick = { showRemoveDownloadDialog = false },
+                ) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+
+                TextButton(
+                    onClick = {
+                        showRemoveDownloadDialog = false
+                        coroutineScope.launch(Dispatchers.IO) {
+                            tracks.forEach { track ->
+                                val ytId = database.getSpotifyMatch(track.id)?.youtubeId ?: return@forEach
+                                DownloadService.sendRemoveDownload(
+                                    context,
+                                    ExoDownloadService::class.java,
+                                    ytId,
+                                    false,
+                                )
+                            }
+                        }
+                    },
+                ) {
+                    Text(text = stringResource(android.R.string.ok))
+                }
+            },
+        )
+    }
+
     PullToRefreshBox(
         state = pullRefreshState,
         isRefreshing = isRefreshing,
@@ -281,50 +367,237 @@ fun SpotifyPlaylistScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(top = 8.dp, bottom = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    // Playlist cover art
+                    val imageUrl = playlist?.images?.firstOrNull()?.url
+                    Surface(
+                        modifier = Modifier
+                            .size(240.dp)
+                            .shadow(
+                                elevation = 24.dp,
+                                shape = RoundedCornerShape(3.dp),
+                                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                            ),
+                        shape = RoundedCornerShape(3.dp),
+                    ) {
+                        if (imageUrl != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(LocalContext.current).data(imageUrl).build(),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.music_note),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(64.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Playlist Name
                     Text(
-                        text = playlist?.name ?: "",
+                        text = playlist?.name.orEmpty(),
                         style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 32.dp),
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Subtitle / Details
                     Text(
-                        text = playlist?.owner?.displayName ?: "",
+                        text = buildString {
+                            val ownerName = playlist?.owner?.displayName
+                            if (!ownerName.isNullOrEmpty()) {
+                                append(ownerName)
+                                append(" • ")
+                            }
+                            append(pluralStringResource(R.plurals.n_song, tracks.size, tracks.size))
+                        },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = pluralStringResource(R.plurals.n_song, tracks.size, tracks.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     )
 
                     if (!isLoading && tracks.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row {
-                            // Play all button
-                            androidx.compose.material3.Button(
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Shuffle Button
+                            Surface(
                                 onClick = {
-                    playerConnection.playQueue(
-                        SpotifyPlaylistQueue(
-                            playlistId = viewModel.playlistId,
-                            initialTracks = sortedItems.mapNotNull { it.track },
-                            startIndex = 0,
-                            mapper = viewModel.mapper,
-                        )
-                    )
+                                    playerConnection.playQueue(
+                                        SpotifyPlaylistQueue(
+                                            playlistId = viewModel.playlistId,
+                                            initialTracks = sortedItems.mapNotNull { it.track }.shuffled(),
+                                            startIndex = 0,
+                                            mapper = viewModel.mapper,
+                                        )
+                                    )
                                 },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(48.dp),
                             ) {
-                                Icon(
-                                    painterResource(R.drawable.play),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                                Spacer(modifier = Modifier.size(8.dp))
-                                Text(stringResource(R.string.play))
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.shuffle),
+                                        contentDescription = stringResource(R.string.shuffle),
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+
+                            // Play Button - Larger primary circular button
+                            Surface(
+                                onClick = {
+                                    playerConnection.playQueue(
+                                        SpotifyPlaylistQueue(
+                                            playlistId = viewModel.playlistId,
+                                            initialTracks = sortedItems.mapNotNull { it.track },
+                                            startIndex = 0,
+                                            mapper = viewModel.mapper,
+                                        )
+                                    )
+                                },
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape,
+                                modifier = Modifier.size(72.dp),
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize(),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.play),
+                                        contentDescription = stringResource(R.string.play),
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(32.dp),
+                                    )
+                                }
+                            }
+
+                            // Download Button next to Play button
+                            val downloadIcon = when (downloadState) {
+                                Download.STATE_COMPLETED -> R.drawable.offline
+                                Download.STATE_DOWNLOADING -> R.drawable.download
+                                else -> R.drawable.download
+                            }
+                            val downloadTint = if (downloadState == Download.STATE_COMPLETED) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Surface(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        when (downloadState) {
+                                            Download.STATE_COMPLETED -> {
+                                                showRemoveDownloadDialog = true
+                                            }
+                                            Download.STATE_DOWNLOADING -> {
+                                                withContext(Dispatchers.IO) {
+                                                    tracks.forEach { track ->
+                                                        val ytId = database.getSpotifyMatch(track.id)?.youtubeId ?: return@forEach
+                                                        DownloadService.sendRemoveDownload(
+                                                            context,
+                                                            ExoDownloadService::class.java,
+                                                            ytId,
+                                                            false,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            else -> {
+                                                withContext(Dispatchers.IO) {
+                                                    tracks.forEach { track ->
+                                                        val mediaMetadata = viewModel.mapper.mapToYouTube(track) ?: return@forEach
+                                                        val downloadRequest = DownloadRequest
+                                                            .Builder(mediaMetadata.id, mediaMetadata.id.toUri())
+                                                            .setCustomCacheKey(mediaMetadata.id)
+                                                            .setData(mediaMetadata.title.toByteArray())
+                                                            .build()
+                                                        DownloadService.sendAddDownload(
+                                                            context,
+                                                            ExoDownloadService::class.java,
+                                                            downloadRequest,
+                                                            false,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(downloadIcon),
+                                        contentDescription = "Download Playlist",
+                                        tint = downloadTint,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+
+                            // Menu Button (SpotifyPlaylistMenu is available for Spotify playlists)
+                            Surface(
+                                onClick = {
+                                    playlist?.let {
+                                        menuState.show {
+                                            SpotifyPlaylistMenu(
+                                                playlist = it,
+                                                onNavigate = {},
+                                                onDismiss = menuState::dismiss
+                                            )
+                                        }
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.more_vert),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
                         }
                     }

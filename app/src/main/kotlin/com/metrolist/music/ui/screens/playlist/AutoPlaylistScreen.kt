@@ -953,6 +953,68 @@ private fun AutoPlaylistHeader(
                 }
             }
 
+            // Download Button next to Play button
+            val downloadIcon = when (downloadState) {
+                Download.STATE_COMPLETED -> R.drawable.offline
+                Download.STATE_DOWNLOADING -> R.drawable.download
+                else -> R.drawable.download
+            }
+            val downloadTint = if (downloadState == Download.STATE_COMPLETED) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Surface(
+                onClick = {
+                    when (downloadState) {
+                        Download.STATE_COMPLETED -> {
+                            onShowRemoveDownloadDialog()
+                        }
+                        Download.STATE_DOWNLOADING -> {
+                            songs.forEach { song ->
+                                DownloadService.sendRemoveDownload(
+                                    context,
+                                    ExoDownloadService::class.java,
+                                    song.song.id,
+                                    false,
+                                )
+                            }
+                        }
+                        else -> {
+                            songs.forEach { song ->
+                                val downloadRequest =
+                                    DownloadRequest
+                                        .Builder(song.song.id, song.song.id.toUri())
+                                        .setCustomCacheKey(song.song.id)
+                                        .setData(song.song.title.toByteArray())
+                                        .build()
+                                DownloadService.sendAddDownload(
+                                    context,
+                                    ExoDownloadService::class.java,
+                                    downloadRequest,
+                                    false,
+                                )
+                            }
+                        }
+                    }
+                },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(downloadIcon),
+                        contentDescription = "Download Playlist",
+                        tint = downloadTint,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+
             // Menu Button - Smaller secondary button
             Surface(
                 onClick = {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,14 +34,18 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import com.metrolist.music.ui.component.DefaultDialog
+import androidx.media3.exoplayer.offline.Download
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -61,6 +66,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
@@ -93,6 +99,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import com.metrolist.music.viewmodels.SpotifyLikedSongsViewModel
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material3.Surface
 import com.metrolist.spotify.SpotifyMapper
 import com.metrolist.spotify.models.SpotifyTrack
 
@@ -108,8 +124,38 @@ fun SpotifyLikedSongsScreen(
     val database = LocalDatabase.current
     val menuState = LocalMenuState.current
     val coroutineScope = rememberCoroutineScope()
-
     val tracks by viewModel.tracks.collectAsState()
+    val downloadUtil = com.metrolist.music.LocalDownloadUtil.current
+    var downloadState by remember { mutableIntStateOf(Download.STATE_STOPPED) }
+    var showRemoveDownloadDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(tracks) {
+        if (tracks.isEmpty()) return@LaunchedEffect
+        downloadUtil.downloads.collect { downloads ->
+            val matchedYtIds = withContext(Dispatchers.IO) {
+                tracks.mapNotNull { track ->
+                    database.getSpotifyMatch(track.id)?.youtubeId
+                }
+            }
+            if (matchedYtIds.isEmpty()) {
+                downloadState = Download.STATE_STOPPED
+                return@collect
+            }
+            downloadState =
+                if (matchedYtIds.all { downloads[it]?.state == Download.STATE_COMPLETED }) {
+                    Download.STATE_COMPLETED
+                } else if (matchedYtIds.all {
+                        val state = downloads[it]?.state
+                        state == Download.STATE_QUEUED ||
+                                state == Download.STATE_DOWNLOADING ||
+                                state == Download.STATE_COMPLETED
+                    }) {
+                    Download.STATE_DOWNLOADING
+                } else {
+                    Download.STATE_STOPPED
+                }
+        }
+    }
     val total by viewModel.total.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
@@ -181,6 +227,46 @@ fun SpotifyLikedSongsScreen(
         query = TextFieldValue()
     }
 
+    if (showRemoveDownloadDialog) {
+        val name = stringResource(R.string.spotify_liked_songs)
+        DefaultDialog(
+            onDismiss = { showRemoveDownloadDialog = false },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_download_playlist_confirm, name),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                )
+            },
+            buttons = {
+                TextButton(
+                    onClick = { showRemoveDownloadDialog = false },
+                ) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+
+                TextButton(
+                    onClick = {
+                        showRemoveDownloadDialog = false
+                        coroutineScope.launch(Dispatchers.IO) {
+                            tracks.forEach { track ->
+                                val ytId = database.getSpotifyMatch(track.id)?.youtubeId ?: return@forEach
+                                DownloadService.sendRemoveDownload(
+                                    context,
+                                    ExoDownloadService::class.java,
+                                    ytId,
+                                    false,
+                                )
+                            }
+                        }
+                    },
+                ) {
+                    Text(text = stringResource(android.R.string.ok))
+                }
+            },
+        )
+    }
+
     PullToRefreshBox(
         state = pullRefreshState,
         isRefreshing = isRefreshing,
@@ -205,23 +291,103 @@ fun SpotifyLikedSongsScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(top = 8.dp, bottom = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    // Premium Spotify Heart cover art box
+                    Surface(
+                        modifier = Modifier
+                            .size(240.dp)
+                            .shadow(
+                                elevation = 24.dp,
+                                shape = RoundedCornerShape(3.dp),
+                                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                            ),
+                        shape = RoundedCornerShape(3.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF1DB954), // Spotify green
+                                            Color(0xFF191414)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.favorite),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(96.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Playlist Title
                     Text(
                         text = stringResource(R.string.spotify_liked_songs),
                         style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 32.dp),
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Subtitle / Details
                     Text(
                         text = pluralStringResource(R.plurals.n_song, total, total),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     )
 
                     if (!isLoading && tracks.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row {
-                            androidx.compose.material3.Button(
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            // Shuffle Button
+                            Surface(
+                                onClick = {
+                                    playerConnection.playQueue(
+                                        SpotifyLikedSongsQueue(
+                                            startIndex = 0,
+                                            mapper = viewModel.mapper,
+                                            tracks = sortedTracks.shuffled(),
+                                        )
+                                    )
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.shuffle),
+                                        contentDescription = stringResource(R.string.shuffle),
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+
+                            // Play Button - Larger primary circular button
+                            Surface(
                                 onClick = {
                                     playerConnection.playQueue(
                                         SpotifyLikedSongsQueue(
@@ -231,14 +397,90 @@ fun SpotifyLikedSongsScreen(
                                         )
                                     )
                                 },
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape,
+                                modifier = Modifier.size(72.dp),
                             ) {
-                                Icon(
-                                    painterResource(R.drawable.play),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                                Spacer(modifier = Modifier.size(8.dp))
-                                Text(stringResource(R.string.play))
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize(),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.play),
+                                        contentDescription = stringResource(R.string.play),
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(32.dp),
+                                    )
+                                }
+                            }
+
+                            // Download Button next to Play button
+                            val downloadIcon = when (downloadState) {
+                                Download.STATE_COMPLETED -> R.drawable.offline
+                                Download.STATE_DOWNLOADING -> R.drawable.download
+                                else -> R.drawable.download
+                            }
+                            val downloadTint = if (downloadState == Download.STATE_COMPLETED) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Surface(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        when (downloadState) {
+                                            Download.STATE_COMPLETED -> {
+                                                showRemoveDownloadDialog = true
+                                            }
+                                            Download.STATE_DOWNLOADING -> {
+                                                withContext(Dispatchers.IO) {
+                                                    tracks.forEach { track ->
+                                                        val ytId = database.getSpotifyMatch(track.id)?.youtubeId ?: return@forEach
+                                                        DownloadService.sendRemoveDownload(
+                                                            context,
+                                                            ExoDownloadService::class.java,
+                                                            ytId,
+                                                            false,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            else -> {
+                                                withContext(Dispatchers.IO) {
+                                                    tracks.forEach { track ->
+                                                        val mediaMetadata = viewModel.mapper.mapToYouTube(track) ?: return@forEach
+                                                        val downloadRequest = DownloadRequest
+                                                            .Builder(mediaMetadata.id, mediaMetadata.id.toUri())
+                                                            .setCustomCacheKey(mediaMetadata.id)
+                                                            .setData(mediaMetadata.title.toByteArray())
+                                                            .build()
+                                                        DownloadService.sendAddDownload(
+                                                            context,
+                                                            ExoDownloadService::class.java,
+                                                            downloadRequest,
+                                                            false,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        painter = painterResource(downloadIcon),
+                                        contentDescription = "Download Playlist",
+                                        tint = downloadTint,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
                         }
                     }
