@@ -44,21 +44,19 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -76,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEachReversed
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -90,6 +89,7 @@ import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalListenTogetherManager
+import com.metrolist.music.LocalNavController
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.LocalSyncUtils
@@ -100,6 +100,7 @@ import com.metrolist.music.db.entities.PlaylistEntity
 import com.metrolist.music.db.entities.PlaylistSongMap
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.queues.YouTubePlaylistQueue
+import com.metrolist.music.ui.component.ExpandableText
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.YouTubeListItem
@@ -107,12 +108,15 @@ import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSelectionSongMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
 import com.metrolist.music.ui.utils.backToMain
+import com.metrolist.music.ui.utils.resize
 import com.metrolist.music.utils.makeTimeString
 import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.OnlinePlaylistViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.saveable.listSaver
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -128,15 +132,15 @@ fun OnlinePlaylistScreen(
     val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
     val coroutineScope = rememberCoroutineScope()
 
-    val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
 
-    val playlist by viewModel.playlist.collectAsState()
-    val songs by viewModel.playlistSongs.collectAsState()
-    val dbPlaylist by viewModel.dbPlaylist.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val playlist by viewModel.playlist.collectAsStateWithLifecycle()
+    val songs by viewModel.playlistSongs.collectAsStateWithLifecycle()
+    val dbPlaylist by viewModel.dbPlaylist.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val isLoadingMore by viewModel.isLoadingMore.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
     val isPodcastPlaylist = viewModel.isPodcastPlaylist
 
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
@@ -159,7 +163,7 @@ fun OnlinePlaylistScreen(
             }
         }
 
-    var inSelectMode by rememberSaveable { mutableStateOf(false) }
+    var inSelectMode by remember { mutableStateOf(false) }
     val selection =
         rememberSaveable(
             saver =
@@ -168,6 +172,7 @@ fun OnlinePlaylistScreen(
                     restore = { it.toMutableStateList() },
                 ),
         ) { mutableStateListOf() }
+    var selectionAnchorSongId by rememberSaveable { mutableStateOf<String?>(null) }
     val onExitSelectionMode = {
         inSelectMode = false
         selection.clear()
@@ -256,7 +261,6 @@ fun OnlinePlaylistScreen(
                                 playlist = playlist,
                                 songs = songs,
                                 dbPlaylist = dbPlaylist,
-                                navController = navController,
                                 coroutineScope = coroutineScope,
                                 continuation = viewModel.continuation,
                                 isPodcastPlaylist = isPodcastPlaylist,
@@ -317,7 +321,7 @@ fun OnlinePlaylistScreen(
                                 } else {
                                     IconButton(onClick = {
                                         menuState.show {
-                                            YouTubeSongMenu(songItem, navController, menuState::dismiss)
+                                            YouTubeSongMenu(songItem, menuState::dismiss)
                                         }
                                     }) {
                                         Icon(painterResource(R.drawable.more_vert), null)
@@ -471,12 +475,12 @@ private fun OnlinePlaylistHeader(
     playlist: PlaylistItem,
     songs: List<SongItem>,
     dbPlaylist: Playlist?,
-    navController: NavController,
     coroutineScope: CoroutineScope,
     continuation: String?,
     isPodcastPlaylist: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val navController = LocalNavController.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val listenTogetherManager = LocalListenTogetherManager.current
     val isListenTogetherGuest = listenTogetherManager?.let { it.isInRoom && !it.isHost } ?: false
@@ -527,7 +531,7 @@ private fun OnlinePlaylistHeader(
             shape = RoundedCornerShape(3.dp),
         ) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(playlist.thumbnail).build(),
+                model = ImageRequest.Builder(LocalContext.current).data(playlist.thumbnail?.resize(1080, 1080)).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -538,7 +542,7 @@ private fun OnlinePlaylistHeader(
 
         Text(
             text = playlist.title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 2,
@@ -546,28 +550,78 @@ private fun OnlinePlaylistHeader(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Metadata - Song Count • Duration
-        val totalDuration = songs.sumOf { it.duration ?: 0 }
-        Text(
-            text =
-                buildString {
-                    append(
-                        if (isPodcastPlaylist) {
-                            pluralStringResource(R.plurals.n_episode, songs.size, songs.size)
-                        } else {
-                            pluralStringResource(R.plurals.n_song, songs.size, songs.size)
+        // Creator row - channel avatar + name centered
+        val author = playlist.author
+        if (author != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier =
+                    Modifier.combinedClickable(
+                        onClick = {
+                            if (author.id != null) {
+                                navController.navigate("artist/${author.id}")
+                            }
                         },
+                    ),
+            ) {
+                if (playlist.authorAvatarUrl != null) {
+                    AsyncImage(
+                        model = playlist.authorAvatarUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier =
+                            Modifier
+                                .size(24.dp)
+                                .clip(CircleShape),
                     )
-                    if (totalDuration > 0) {
-                        append(" • ")
-                        append(makeTimeString(totalDuration * 1000L))
-                    }
-                },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                }
+                Text(
+                    text = author.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // Metadata row - song count, duration
+        val totalDuration = songs.sumOf { it.duration ?: 0 }
+        val nSongs = pluralStringResource(
+            if (isPodcastPlaylist) R.plurals.n_episode else R.plurals.n_song,
+            songs.size,
+            songs.size,
         )
+        val durationText = if (totalDuration > 0) makeTimeString(totalDuration * 1000L) else null
+        val metadataText = buildString {
+            append(nSongs)
+            if (durationText != null) {
+                append(" ")
+                append(durationText)
+            }
+        }
+        Text(
+            text = metadataText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp),
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Description
+        val description = playlist.description
+        if (!description.isNullOrBlank()) {
+            ExpandableText(
+                text = description,
+                modifier = Modifier.padding(horizontal = 32.dp),
+                collapsedMaxLines = 3,
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -589,7 +643,7 @@ private fun OnlinePlaylistHeader(
                             update(currentPlaylist.toggleLike())
                         }
                     } else {
-                        database.transaction {
+                        coroutineScope.launch(Dispatchers.IO) {
                             val playlistEntity =
                                 PlaylistEntity(
                                     name = playlist.title,
@@ -604,19 +658,15 @@ private fun OnlinePlaylistHeader(
                                     shuffleEndpointParams = playlist.shuffleEndpoint?.params,
                                     radioEndpointParams = playlist.radioEndpoint?.params,
                                 ).toggleLike()
-                            insert(playlistEntity)
-                            coroutineScope.launch(Dispatchers.IO) {
-                                songs
-                                    .map { it.toMediaMetadata() }
-                                    .onEach(::insert)
-                                    .mapIndexed { index, song ->
-                                        PlaylistSongMap(
-                                            songId = song.id,
-                                            playlistId = playlistEntity.id,
-                                            position = index,
-                                            setVideoId = song.setVideoId,
-                                        )
-                                    }.forEach(::insert)
+                            val songMetadata = songs.map { it.toMediaMetadata() }
+                            database.withTransaction {
+                                insert(playlistEntity)
+                                songMetadata.onEach { insert(it) }
+                                val songIds = songMetadata.map { it.id to it.setVideoId }
+                                val createdPlaylist =
+                                    database.playlistBlocking(playlistEntity.id)
+                                        ?: throw IllegalStateException("Failed to create playlist")
+                                database.addSongsToPlaylist(createdPlaylist, songIds)
                             }
                         }
                     }
