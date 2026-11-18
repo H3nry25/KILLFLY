@@ -37,11 +37,13 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.music.LocalDatabase
+import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.R
 import com.metrolist.music.constants.AddToPlaylistPosition
 import com.metrolist.music.constants.AddToPlaylistPositionKey
 import com.metrolist.music.constants.AddToPlaylistSortDescendingKey
 import com.metrolist.music.constants.AddToPlaylistSortTypeKey
+import com.metrolist.music.constants.AutoDownloadPlaylistsKey
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.constants.PlaylistSortType
 import com.metrolist.music.db.entities.Playlist
@@ -103,6 +105,8 @@ fun AddToPlaylistDialogOnline(
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val database = LocalDatabase.current
+    val downloadUtil = LocalDownloadUtil.current
+    val (autoDownloadPlaylists) = rememberPreference(AutoDownloadPlaylistsKey, emptySet())
     val coroutineScope = rememberCoroutineScope()
     val viewStateMap = remember { mutableStateMapOf<String, ItemsPage?>() }
     val (addToPlaylistPosition) = rememberEnumPreference(
@@ -352,6 +356,9 @@ fun AddToPlaylistDialogOnline(
                                     resolvedSongIds.filterNotNull().map { it to null },
                                     prepend = addToPlaylistPosition.prepend,
                                 )
+                                if (playlist.id in autoDownloadPlaylists) {
+                                    resolvedSongIds.filterNotNull().forEach { downloadUtil.download(it) }
+                                }
                             } finally {
                                 withContext(Dispatchers.Main) {
                                     onProgressStart(false)
@@ -464,13 +471,17 @@ fun AddToPlaylistDialogOnline(
                     onClick = {
                         showDuplicateDialog = false
                         coroutineScope.launch {
+                            val toAdd = songIds!!.filter {
+                                !duplicates.contains(it)
+                            }
                             database.addSongsToPlaylist(
                                 selectedPlaylist!!,
-                                songIds!!.filter {
-                                    !duplicates.contains(it)
-                                }.map { it to null },
+                                toAdd.map { it to null },
                                 prepend = addToPlaylistPosition.prepend,
                             )
+                            if (selectedPlaylist!!.id in autoDownloadPlaylists) {
+                                toAdd.forEach { downloadUtil.download(it) }
+                            }
                             onDismiss()
                         }
                     }
@@ -487,6 +498,9 @@ fun AddToPlaylistDialogOnline(
                                 songIds!!.map { it to null },
                                 prepend = addToPlaylistPosition.prepend,
                             )
+                            if (selectedPlaylist!!.id in autoDownloadPlaylists) {
+                                songIds!!.forEach { downloadUtil.download(it) }
+                            }
                             onDismiss()
                         }
                     }

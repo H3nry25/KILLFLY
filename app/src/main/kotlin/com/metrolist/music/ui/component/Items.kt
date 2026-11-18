@@ -48,11 +48,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -103,6 +104,8 @@ import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.LocalNavController
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoDownloadOnLikeKey
+import com.metrolist.music.constants.AutoDownloadPlaylistsKey
 import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.GridItemSize
 import com.metrolist.music.constants.GridItemsSizeKey
@@ -533,13 +536,30 @@ fun SongListItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (download?.state == Download.STATE_COMPLETED) {
-                        Icon(
-                            painter = painterResource(R.drawable.offline),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    when (download?.state) {
+                        Download.STATE_COMPLETED -> {
+                            Icon(
+                                painter = painterResource(R.drawable.offline),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Download.STATE_DOWNLOADING -> {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Download.STATE_QUEUED -> {
+                            Icon(
+                                painter = painterResource(R.drawable.download),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        else -> {}
                     }
                     trailingContent()
                 }
@@ -720,7 +740,7 @@ fun AlbumListItem(
 
         val allDownloads by downloadUtil.downloads.collectAsStateWithLifecycle()
 
-        val downloadState by remember(songs, allDownloads) {
+        val downloadState = remember(songs, allDownloads) {
             androidx.compose.runtime.mutableIntStateOf(
                 if (songs.isEmpty()) {
                     Download.STATE_STOPPED
@@ -740,7 +760,7 @@ fun AlbumListItem(
         if (album.album.explicit) {
             Icon.Explicit()
         }
-        Icon.Download(downloadState)
+        Icon.Download(downloadState.value)
     },
     isActive: Boolean = false,
     isPlaying: Boolean = false,
@@ -791,7 +811,7 @@ fun AlbumGridItem(
 
         val allDownloads by downloadUtil.downloads.collectAsStateWithLifecycle()
 
-        val downloadState by remember(songs, allDownloads) {
+        val downloadState = remember(songs, allDownloads) {
             androidx.compose.runtime.mutableIntStateOf(
                 if (songs.isEmpty()) {
                     Download.STATE_STOPPED
@@ -811,7 +831,7 @@ fun AlbumGridItem(
         if (album.album.explicit) {
             Icon.Explicit()
         }
-        Icon.Download(downloadState)
+        Icon.Download(downloadState.value)
     },
     isActive: Boolean = false,
     isPlaying: Boolean = false,
@@ -872,33 +892,26 @@ fun PlaylistListItem(
     playlist: Playlist,
     modifier: Modifier = Modifier,
     autoPlaylist: Boolean = false,
+    songs: List<Song> = emptyList(),
+    allDownloads: Map<String, Download> = emptyMap(),
+    isAutoDownloadTarget: Boolean = false,
     badges: @Composable RowScope.() -> Unit = {
-        val downloadUtil = LocalDownloadUtil.current
-        val database = LocalDatabase.current
-
-        val songs by produceState<List<Song>>(initialValue = emptyList(), playlist.id) {
-            withContext(Dispatchers.IO) {
-                value = database.playlistSongs(playlist.id).first().map { it.song }
-            }
-        }
-
-        val allDownloads by downloadUtil.downloads.collectAsStateWithLifecycle()
-
-        val downloadState by remember(songs, allDownloads) {
+        val downloadState = remember(songs, allDownloads, isAutoDownloadTarget) {
             androidx.compose.runtime.mutableIntStateOf(
                 if (songs.isEmpty()) {
-                    Download.STATE_STOPPED
+                    if (isAutoDownloadTarget) STATE_COMPLETED else Download.STATE_STOPPED
                 } else {
                     when {
                         songs.all { allDownloads[it.id]?.state == STATE_COMPLETED } -> STATE_COMPLETED
                         songs.any { allDownloads[it.id]?.state in listOf(STATE_QUEUED, STATE_DOWNLOADING) } -> STATE_DOWNLOADING
+                        isAutoDownloadTarget -> STATE_COMPLETED
                         else -> Download.STATE_STOPPED
                     }
                 }
             )
         }
 
-        Icon.Download(downloadState)
+        Icon.Download(downloadState.value)
     },
     trailingContent: @Composable RowScope.() -> Unit = {}
 ) = ListItem(
@@ -958,33 +971,26 @@ fun PlaylistGridItem(
     playlist: Playlist,
     modifier: Modifier = Modifier,
     autoPlaylist: Boolean = false,
+    songs: List<Song> = emptyList(),
+    allDownloads: Map<String, Download> = emptyMap(),
+    isAutoDownloadTarget: Boolean = false,
     badges: @Composable RowScope.() -> Unit = {
-        val downloadUtil = LocalDownloadUtil.current
-        val database = LocalDatabase.current
-
-        val songs by produceState<List<Song>>(initialValue = emptyList(), playlist.id) {
-            withContext(Dispatchers.IO) {
-                value = database.playlistSongs(playlist.id).first().map { it.song }
-            }
-        }
-
-        val allDownloads by downloadUtil.downloads.collectAsStateWithLifecycle()
-
-        val downloadState by remember(songs, allDownloads) {
-            mutableIntStateOf(
+        val downloadState = remember(songs, allDownloads, isAutoDownloadTarget) {
+            androidx.compose.runtime.mutableIntStateOf(
                 if (songs.isEmpty()) {
-                    Download.STATE_STOPPED
+                    if (isAutoDownloadTarget) STATE_COMPLETED else Download.STATE_STOPPED
                 } else {
                     when {
                         songs.all { allDownloads[it.id]?.state == STATE_COMPLETED } -> STATE_COMPLETED
                         songs.any { allDownloads[it.id]?.state in listOf(STATE_QUEUED, STATE_DOWNLOADING) } -> STATE_DOWNLOADING
+                        isAutoDownloadTarget -> STATE_COMPLETED
                         else -> Download.STATE_STOPPED
                     }
                 }
             )
         }
 
-        Icon.Download(downloadState)
+        Icon.Download(downloadState.value)
     },
     fillMaxWidth: Boolean = false,
 ) = GridItem(
@@ -1126,13 +1132,8 @@ fun YouTubeListItem(
     isSwipeable: Boolean = true,
     trailingContent: @Composable RowScope.() -> Unit = {},
     badges: @Composable RowScope.() -> Unit = {
-        val database = LocalDatabase.current
-        val song by produceState<Song?>(initialValue = null, item.id) {
-            if (item is SongItem) value = database.song(item.id).firstOrNull()
-        }
-        val album by produceState<Album?>(initialValue = null, item.id) {
-            if (item is AlbumItem) value = database.album(item.id).firstOrNull()
-        }
+        val song: Song? = null // Pre-fetched from parent
+        val album: Album? = null // Pre-fetched from parent
 
         if ((item is SongItem && song?.song?.liked == true) ||
             (item is AlbumItem && album?.album?.bookmarkedAt != null)
@@ -1140,9 +1141,6 @@ fun YouTubeListItem(
             Icon.Favorite()
         }
         if (item.explicit) Icon.Explicit()
-        // if (item is SongItem && song?.song?.inLibrary != null) {
-        //     Icon.Library()
-        // }
         if (item is SongItem) {
             val download by LocalDownloadUtil.current.getDownload(item.id).collectAsStateWithLifecycle(null)
             Icon.Download(download?.state)
@@ -1232,22 +1230,15 @@ fun YouTubeGridItem(
     item: YTItem,
     modifier: Modifier = Modifier,
     coroutineScope: CoroutineScope? = null,
+    song: Song? = null,
+    album: Album? = null,
     badges: @Composable RowScope.() -> Unit = {
-        val database = LocalDatabase.current
-        val song by produceState<Song?>(initialValue = null, item.id) {
-            if (item is SongItem) value = database.song(item.id).firstOrNull()
-        }
-        val album by produceState<Album?>(initialValue = null, item.id) {
-            if (item is AlbumItem) value = database.album(item.id).firstOrNull()
-        }
-
         if (item is SongItem && song?.song?.liked == true ||
             item is AlbumItem && album?.album?.bookmarkedAt != null
         ) {
             Icon.Favorite()
         }
         if (item.explicit) Icon.Explicit()
-        // if (item is SongItem && song?.song?.inLibrary != null) Icon.Library()
         if (item is SongItem) {
             val download by LocalDownloadUtil.current.getDownload(item.id).collectAsStateWithLifecycle(null)
             Icon.Download(download?.state)
@@ -1956,12 +1947,21 @@ object Icon {
             STATE_COMPLETED -> Icon(
                 painter = painterResource(R.drawable.offline),
                 contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .size(18.dp)
                     .padding(end = 2.dp)
             )
-            STATE_QUEUED, STATE_DOWNLOADING -> CircularProgressIndicator(
+            STATE_DOWNLOADING -> CircularProgressIndicator(
                 strokeWidth = 2.dp,
+                modifier = Modifier
+                    .size(16.dp)
+                    .padding(end = 2.dp)
+            )
+            STATE_QUEUED -> Icon(
+                painter = painterResource(R.drawable.download),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 modifier = Modifier
                     .size(16.dp)
                     .padding(end = 2.dp)

@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,9 +94,11 @@ import androidx.compose.ui.util.fastForEachIndexed
 import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.util.fastSumBy
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
@@ -108,6 +111,7 @@ import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.LocalSyncUtils
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoDownloadPlaylistsKey
 import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.PlaylistEditLockKey
 import com.metrolist.music.constants.PlaylistSongSortDescendingKey
@@ -126,6 +130,7 @@ import com.metrolist.music.ui.component.DefaultDialog
 import com.metrolist.music.ui.component.DraggableScrollbar
 import com.metrolist.music.ui.component.EmptyPlaceholder
 import com.metrolist.music.ui.component.ExpandableText
+import com.metrolist.music.ui.component.Icon
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.OverlayEditButton
@@ -242,6 +247,8 @@ fun LocalPlaylistScreen(
     }
 
     val downloadUtil = LocalDownloadUtil.current
+    val (autoDownloadPlaylists, onAutoDownloadPlaylistsChange) = rememberPreference(AutoDownloadPlaylistsKey, emptySet())
+    val allDownloads = downloadUtil.downloads.collectAsStateWithLifecycle(initialValue = emptyMap())
     var downloadState by remember {
         mutableIntStateOf(Download.STATE_STOPPED)
     }
@@ -270,10 +277,11 @@ fun LocalPlaylistScreen(
             downloadState =
                 if (songs.all { downloads[it.song.id]?.state == Download.STATE_COMPLETED }) {
                     Download.STATE_COMPLETED
-                } else if (songs.all {
-                        downloads[it.song.id]?.state == Download.STATE_QUEUED ||
-                            downloads[it.song.id]?.state == Download.STATE_DOWNLOADING ||
-                            downloads[it.song.id]?.state == Download.STATE_COMPLETED
+                } else if (songs.any {
+                        downloads[it.song.id]?.state in listOf(
+                            Download.STATE_QUEUED,
+                            Download.STATE_DOWNLOADING,
+                        )
                     }
                 ) {
                     Download.STATE_DOWNLOADING
@@ -348,6 +356,9 @@ fun LocalPlaylistScreen(
                 TextButton(
                     onClick = {
                         showRemoveDownloadDialog = false
+                        playlist?.id?.let { pid ->
+                            onAutoDownloadPlaylistsChange(autoDownloadPlaylists - pid)
+                        }
                         if (!editable) {
                             database.transaction {
                                 playlist?.id?.let { clearPlaylist(it) }
@@ -614,6 +625,16 @@ fun LocalPlaylistScreen(
                             isActive = song.song.id == mediaMetadata?.id,
                             isPlaying = isPlaying,
                             showInLibraryIcon = true,
+                            badges = {
+                                val download = allDownloads.value[song.song.id]
+                                if (song.song.song.liked) {
+                                    com.metrolist.music.ui.component.Icon.Favorite()
+                                }
+                                if (song.song.song.explicit) {
+                                    com.metrolist.music.ui.component.Icon.Explicit()
+                                }
+                                com.metrolist.music.ui.component.Icon.Download(download?.state)
+                            },
                             trailingContent = {
                                 if (inSelectMode) {
                                     Checkbox(
@@ -884,9 +905,14 @@ fun LocalPlaylistHeader(
         }
 
     val downloadUtil = LocalDownloadUtil.current
+    val (autoDownloadPlaylists, onAutoDownloadPlaylistsChange) = rememberPreference(AutoDownloadPlaylistsKey, emptySet())
     var downloadState by remember {
         mutableIntStateOf(Download.STATE_STOPPED)
     }
+
+    val isAutoDownloadActive = autoDownloadPlaylists.contains(playlist.id)
+    val isCompleted = downloadState == Download.STATE_COMPLETED || (isAutoDownloadActive && downloadState != Download.STATE_DOWNLOADING)
+    val isDownloading = downloadState == Download.STATE_DOWNLOADING
 
     val liked = playlist.playlist.bookmarkedAt != null
     val editable: Boolean = playlist.playlist.isEditable
@@ -999,10 +1025,11 @@ fun LocalPlaylistHeader(
             downloadState =
                 if (songs.all { downloads[it.song.id]?.state == Download.STATE_COMPLETED }) {
                     Download.STATE_COMPLETED
-                } else if (songs.all {
-                        downloads[it.song.id]?.state == Download.STATE_QUEUED ||
-                            downloads[it.song.id]?.state == Download.STATE_DOWNLOADING ||
-                            downloads[it.song.id]?.state == Download.STATE_COMPLETED
+                } else if (songs.any {
+                        downloads[it.song.id]?.state in listOf(
+                            Download.STATE_QUEUED,
+                            Download.STATE_DOWNLOADING,
+                        )
                     }
                 ) {
                     Download.STATE_DOWNLOADING
@@ -1309,6 +1336,48 @@ fun LocalPlaylistHeader(
             )
         }
 
+        if (isCompleted || isDownloading) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = stringResource(R.string.playlist_downloading),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.offline),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = stringResource(R.string.playlist_downloaded_auto_active),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Action Buttons Row
@@ -1374,54 +1443,40 @@ fun LocalPlaylistHeader(
             }
 
             // Download Button next to Play button
-            val downloadIcon = when (downloadState) {
-                Download.STATE_COMPLETED -> R.drawable.offline
-                Download.STATE_DOWNLOADING -> R.drawable.download
+            val downloadIcon = when {
+                isCompleted -> R.drawable.offline
+                isDownloading -> R.drawable.download
                 else -> R.drawable.download
             }
-            val downloadTint = if (downloadState == Download.STATE_COMPLETED) {
+            val downloadTint = if (isCompleted) {
                 MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             }
+            val downloadContainerColor = if (isCompleted) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
             Surface(
                 onClick = {
-                    when (downloadState) {
-                        Download.STATE_COMPLETED -> {
+                    when {
+                        isCompleted -> {
                             onShowRemoveDownloadDialog()
                         }
-                        Download.STATE_DOWNLOADING -> {
-                            songs.forEach { song ->
-                                DownloadService.sendRemoveDownload(
-                                    context,
-                                    ExoDownloadService::class.java,
-                                    song.song.id,
-                                    false,
-                                )
-                            }
+                        isDownloading -> {
+                            onShowRemoveDownloadDialog()
                         }
                         else -> {
+                            onAutoDownloadPlaylistsChange(autoDownloadPlaylists + playlist.id)
                             songs.forEach { song ->
-                                val downloadRequest =
-                                    DownloadRequest
-                                        .Builder(song.song.id, song.song.id.toUri())
-                                        .setCustomCacheKey(song.song.id)
-                                        .setData(
-                                            song.song.song.title
-                                                .toByteArray(),
-                                        ).build()
-                                DownloadService.sendAddDownload(
-                                    context,
-                                    ExoDownloadService::class.java,
-                                    downloadRequest,
-                                    false,
-                                )
+                                downloadUtil.download(song.song)
                             }
                         }
                     }
                 },
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = downloadContainerColor,
                 modifier = Modifier.size(48.dp),
             ) {
                 Box(
@@ -1460,23 +1515,17 @@ fun LocalPlaylistHeader(
                             },
                             onDelete = onshowDeletePlaylistDialog,
                             onDownload = {
-                                when (downloadState) {
-                                    Download.STATE_COMPLETED -> {
+                                when {
+                                    isCompleted -> {
                                         onShowRemoveDownloadDialog()
                                     }
 
-                                    Download.STATE_DOWNLOADING -> {
-                                        songs.forEach { song ->
-                                            DownloadService.sendRemoveDownload(
-                                                context,
-                                                ExoDownloadService::class.java,
-                                                song.song.id,
-                                                false,
-                                            )
-                                        }
+                                    isDownloading -> {
+                                        onShowRemoveDownloadDialog()
                                     }
 
                                     else -> {
+                                        onAutoDownloadPlaylistsChange(autoDownloadPlaylists + playlist.id)
                                         songs.forEach { song ->
                                             downloadUtil.download(song.song)
                                         }

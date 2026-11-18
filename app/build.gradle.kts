@@ -40,8 +40,8 @@ android {
         applicationId = applicationIdOverride ?: "com.meld.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.8.8"
+        versionCode = 29
+        versionName = "0.9.2"
         val baseVersionName = requireNotNull(versionName)
         buildConfigField("String", "BASE_VERSION_NAME", "\"$baseVersionName\"")
         buildCommit?.let { versionName = "$baseVersionName+$it" }

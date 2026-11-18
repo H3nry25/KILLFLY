@@ -22,7 +22,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -135,17 +139,39 @@ fun AppNavigationBar(
     onItemClick: (Screens, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     pureBlack: Boolean = false,
+    liquidGlassBlack: Boolean = false,
     slimNav: Boolean = false,
     onSearchLongClick: (() -> Unit)? = null,
     onHomeLongHold: (() -> Unit)? = null,
 ) {
-    val containerColor = (if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer).copy(alpha = 0.75f)
-    val contentColor = if (pureBlack) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val containerColor = when {
+        liquidGlassBlack -> Color(0xCC090B12)
+        pureBlack -> Color.Black.copy(alpha = 0.75f)
+        else -> MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.75f)
+    }
+    val contentColor = if (liquidGlassBlack || pureBlack) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
     val haptics = LocalHapticFeedback.current
     val viewConfiguration = LocalViewConfiguration.current
 
     NavigationBar(
-        modifier = modifier,
+        modifier = modifier.then(
+            if (liquidGlassBlack) {
+                Modifier.drawBehind {
+                    drawLine(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.05f),
+                                Color.White.copy(alpha = 0.22f),
+                                Color.White.copy(alpha = 0.05f),
+                            )
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, 0f),
+                        strokeWidth = 1.2.dp.toPx()
+                    )
+                }
+            } else Modifier
+        ),
         containerColor = containerColor,
         contentColor = contentColor
     ) {

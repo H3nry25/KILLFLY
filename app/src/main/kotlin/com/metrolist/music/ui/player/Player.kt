@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Metrolist Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
@@ -143,6 +143,7 @@ import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.HidePlayerThumbnailKey
 import com.metrolist.music.constants.HideStatusBarOnFullscreenKey
 import com.metrolist.music.constants.KeepScreenOn
+import com.metrolist.music.constants.LiquidGlassBlackKey
 import com.metrolist.music.constants.PlayerBackgroundStyle
 import com.metrolist.music.constants.PlayerBackgroundStyleKey
 import com.metrolist.music.constants.PlayerButtonsStyle
@@ -248,11 +249,12 @@ fun BottomSheetPlayer(
             if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
         }
 
+    val (liquidGlassBlack) = rememberPreference(LiquidGlassBlackKey, defaultValue = true)
     val shouldUseDarkButtonColors =
-        remember(playerBackground, useDarkTheme) {
+        remember(playerBackground, useDarkTheme, liquidGlassBlack) {
             when (playerBackground) {
-                PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT -> true
-                PlayerBackgroundStyle.DEFAULT -> useDarkTheme
+                PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT, PlayerBackgroundStyle.LIQUID_GLASS -> true
+                PlayerBackgroundStyle.DEFAULT -> if (liquidGlassBlack) true else useDarkTheme
             }
         }
 
@@ -260,18 +262,18 @@ fun BottomSheetPlayer(
     val isKeepScreenOn by rememberPreference(KeepScreenOn, false)
     val keepScreenOn = isPlaying && isKeepScreenOn
 
-    DisposableEffect(playerBackground, state.isExpanded, useDarkTheme, keepScreenOn, isFullScreen, hideStatusBarOnFullscreen) {
+    DisposableEffect(playerBackground, state.isExpanded, useDarkTheme, keepScreenOn, isFullScreen, hideStatusBarOnFullscreen, liquidGlassBlack) {
         val window = (context as? android.app.Activity)?.window
         if (window != null && state.isExpanded) {
             val insetsController = WindowCompat.getInsetsController(window, window.decorView)
 
             when (playerBackground) {
-                PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT -> {
+                PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT, PlayerBackgroundStyle.LIQUID_GLASS -> {
                     insetsController.isAppearanceLightStatusBars = false
                 }
 
                 PlayerBackgroundStyle.DEFAULT -> {
-                    insetsController.isAppearanceLightStatusBars = !useDarkTheme
+                    insetsController.isAppearanceLightStatusBars = if (liquidGlassBlack) false else !useDarkTheme
                 }
             }
 
@@ -466,6 +468,7 @@ fun BottomSheetPlayer(
                 PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.onBackground
                 PlayerBackgroundStyle.BLUR -> Color.White
                 PlayerBackgroundStyle.GRADIENT -> Color.White
+                PlayerBackgroundStyle.LIQUID_GLASS -> Color.White
             },
         label = "TextBackgroundColor",
     )
@@ -476,6 +479,7 @@ fun BottomSheetPlayer(
                 PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.surface
                 PlayerBackgroundStyle.BLUR -> Color.Black
                 PlayerBackgroundStyle.GRADIENT -> Color.Black
+                PlayerBackgroundStyle.LIQUID_GLASS -> Color.Black
             },
         label = "icBackgroundColor",
     )
@@ -483,7 +487,8 @@ fun BottomSheetPlayer(
     val (textButtonColor, iconButtonColor) =
         when {
             playerBackground == PlayerBackgroundStyle.BLUR ||
-                playerBackground == PlayerBackgroundStyle.GRADIENT -> {
+                playerBackground == PlayerBackgroundStyle.GRADIENT ||
+                playerBackground == PlayerBackgroundStyle.LIQUID_GLASS -> {
                 when (playerButtonsStyle) {
                     PlayerButtonsStyle.DEFAULT -> {
                         Pair(Color.White, Color.Black)
@@ -536,7 +541,8 @@ fun BottomSheetPlayer(
     val (sideButtonContainerColor, sideButtonContentColor) =
         when {
             playerBackground == PlayerBackgroundStyle.BLUR ||
-                playerBackground == PlayerBackgroundStyle.GRADIENT -> {
+                playerBackground == PlayerBackgroundStyle.GRADIENT ||
+                playerBackground == PlayerBackgroundStyle.LIQUID_GLASS -> {
                 when (playerButtonsStyle) {
                     PlayerButtonsStyle.DEFAULT -> {
                         Pair(
@@ -819,12 +825,14 @@ fun BottomSheetPlayer(
 
     val bottomSheetBackgroundColor =
         when (playerBackground) {
-            PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT -> {
+            PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT, PlayerBackgroundStyle.LIQUID_GLASS -> {
                 MaterialTheme.colorScheme.surfaceContainer
             }
 
             else -> {
-                if (useBlackBackground) {
+                if (liquidGlassBlack) {
+                    Color(0xFF08090E)
+                } else if (useBlackBackground) {
                     Color.Black
                 } else {
                     MaterialTheme.colorScheme.surfaceContainer
@@ -915,8 +923,108 @@ fun BottomSheetPlayer(
                         }
                     }
 
+                    PlayerBackgroundStyle.LIQUID_GLASS -> {
+                        AnimatedContent(
+                            targetState = mediaMetadata?.thumbnailUrl,
+                            transitionSpec = {
+                                fadeIn(tween(800)).togetherWith(fadeOut(tween(800)))
+                            },
+                            label = "liquidGlassBackground",
+                        ) { thumbnailUrl ->
+                            Box(modifier = Modifier.fillMaxSize().alpha(backgroundAlpha)) {
+                                if (thumbnailUrl != null) {
+                                    AsyncImage(
+                                        model =
+                                            ImageRequest
+                                                .Builder(context)
+                                                .data(thumbnailUrl)
+                                                .size(100, 100)
+                                                .allowHardware(false)
+                                                .build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .blur(60.dp),
+                                    )
+                                }
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .background(Color(0xE608090E)),
+                                )
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        Color.White.copy(alpha = 0.14f),
+                                                        Color.White.copy(alpha = 0.03f),
+                                                        Color.Transparent,
+                                                        Color.Black.copy(alpha = 0.35f),
+                                                    )
+                                                )
+                                            ),
+                                )
+                            }
+                        }
+                    }
+
                     else -> {
-                        PlayerBackgroundStyle.DEFAULT
+                        if (liquidGlassBlack && mediaMetadata?.thumbnailUrl != null) {
+                            AnimatedContent(
+                                targetState = mediaMetadata?.thumbnailUrl,
+                                transitionSpec = {
+                                    fadeIn(tween(800)).togetherWith(fadeOut(tween(800)))
+                                },
+                                label = "liquidGlassDefaultBackground",
+                            ) { thumbnailUrl ->
+                                Box(modifier = Modifier.fillMaxSize().alpha(backgroundAlpha)) {
+                                    AsyncImage(
+                                        model =
+                                            ImageRequest
+                                                .Builder(context)
+                                                .data(thumbnailUrl)
+                                                .size(100, 100)
+                                                .allowHardware(false)
+                                                .build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .blur(60.dp),
+                                    )
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .background(Color(0xE608090E)),
+                                    )
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        colors = listOf(
+                                                            Color.White.copy(alpha = 0.14f),
+                                                            Color.White.copy(alpha = 0.03f),
+                                                            Color.Transparent,
+                                                            Color.Black.copy(alpha = 0.35f),
+                                                        )
+                                                    )
+                                                ),
+                                    )
+                                }
+                            }
+                        } else {
+                            PlayerBackgroundStyle.DEFAULT
+                        }
                     }
                 }
             }
@@ -1439,7 +1547,7 @@ fun BottomSheetPlayer(
                     androidx.compose.material3.IconButton(
                         onClick = {
                             if (sleepTimerEnabled) {
-                                playerConnection.service.sleepTimer.clear()
+                                playerConnection.service.sleepTimer?.clear()
                             } else {
                                 showSleepTimerDialog = true
                             }

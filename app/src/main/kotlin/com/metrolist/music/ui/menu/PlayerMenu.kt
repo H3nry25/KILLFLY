@@ -92,6 +92,7 @@ import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.playback.ExoDownloadService
 import com.metrolist.music.playback.SpotifyYouTubeMapper
+import com.metrolist.music.ui.component.ActionPromptDialog
 import com.metrolist.music.ui.component.YouTubeMatchDialog
 import com.metrolist.music.db.entities.Song
 import com.metrolist.music.db.entities.SpeedDialItem
@@ -172,6 +173,10 @@ fun PlayerMenu(
         mutableStateOf(false)
     }
 
+    var showRemoveDownloadDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
     var showAddToSpotifyPlaylist by rememberSaveable { mutableStateOf(false) }
     val spotifyMapper = remember { SpotifyYouTubeMapper(database) }
 
@@ -204,6 +209,30 @@ fun PlayerMenu(
             isrc = librarySong?.song?.isrc,
             durationMs = mediaMetadata.duration.takeIf { it > 0 }?.toLong()?.times(1000L),
             onDismiss = { showQobuzMatchDialog = false },
+        )
+    }
+
+    if (showRemoveDownloadDialog) {
+        ActionPromptDialog(
+            title = stringResource(R.string.remove_download),
+            onDismiss = { showRemoveDownloadDialog = false },
+            onConfirm = {
+                DownloadService.sendRemoveDownload(
+                    context,
+                    ExoDownloadService::class.java,
+                    mediaMetadata.id,
+                    false,
+                )
+                showRemoveDownloadDialog = false
+            },
+            onCancel = { showRemoveDownloadDialog = false },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_download_confirm),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            },
         )
     }
 
@@ -637,12 +666,7 @@ fun PlayerMenu(
                                         )
                                     },
                                     onClick = {
-                                        DownloadService.sendRemoveDownload(
-                                            context,
-                                            ExoDownloadService::class.java,
-                                            mediaMetadata.id,
-                                            false,
-                                        )
+                                        showRemoveDownloadDialog = true
                                     },
                                 )
                             }
@@ -657,12 +681,7 @@ fun PlayerMenu(
                                         )
                                     },
                                     onClick = {
-                                        DownloadService.sendRemoveDownload(
-                                            context,
-                                            ExoDownloadService::class.java,
-                                            mediaMetadata.id,
-                                            false,
-                                        )
+                                        showRemoveDownloadDialog = true
                                     },
                                 )
                             }

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
@@ -20,10 +21,12 @@ val SelectedThemeColorKey = intPreferencesKey("selectedThemeColor")
 val DarkModeKey = stringPreferencesKey("darkMode")
 val PureBlackKey = booleanPreferencesKey("pureBlack")
 val PureBlackMiniPlayerKey = booleanPreferencesKey("pureBlackMiniPlayer")
+val LiquidGlassBlackKey = booleanPreferencesKey("liquidGlassBlack")
 val MiniPlayerBackgroundStyleKey = stringPreferencesKey("miniPlayerBackgroundStyle")
 
 enum class MiniPlayerBackgroundStyle {
     DEFAULT,
+    LIQUID_GLASS,
     TRANSPARENT,
     BLUR,
     GRADIENT,
@@ -54,6 +57,7 @@ val GridItemsSizeKey = stringPreferencesKey("gridItemSize")
 val SliderStyleKey = stringPreferencesKey("sliderStyle")
 val SquigglySliderKey = booleanPreferencesKey("squigglySlider")
 val SwipeToSongKey = booleanPreferencesKey("SwipeToSong")
+val TvmodeKey = booleanPreferencesKey("tvMode")
 val SwipeToRemoveSongKey = booleanPreferencesKey("SwipeToRemoveSong")
 val UseNewPlayerDesignKey = booleanPreferencesKey("useNewPlayerDesign")
 val UseNewMiniPlayerDesignKey = booleanPreferencesKey("useNewMiniPlayerDesign")
@@ -142,6 +146,7 @@ val AutoLoadMoreKey = booleanPreferencesKey("autoLoadMore")
 val AutoRadioQueueKey = booleanPreferencesKey("autoRadioQueue")
 val DisableLoadMoreWhenRepeatAllKey = booleanPreferencesKey("disableLoadMoreWhenRepeatAll")
 val AutoDownloadOnLikeKey = booleanPreferencesKey("autoDownloadOnLike")
+val AutoDownloadPlaylistsKey = stringSetPreferencesKey("autoDownloadPlaylists")
 val SimilarContent = booleanPreferencesKey("similarContent")
 val AutoSkipNextOnErrorKey = booleanPreferencesKey("autoSkipNextOnError")
 val AutoplayKey = booleanPreferencesKey("autoplay")
@@ -492,6 +497,7 @@ enum class PlayerButtonsStyle {
 
 enum class PlayerBackgroundStyle {
     DEFAULT,
+    LIQUID_GLASS,
     GRADIENT,
     BLUR,
 }
@@ -802,3 +808,6 @@ val CountryCodeToName =
         "YE" to "Yemen",
         "ZW" to "Zimbabwe",
     )
+
+val GoogleDriveWebhookUrlKey = stringPreferencesKey("googleDriveWebhookUrl")
+val AutoUploadLikedToDriveKey = booleanPreferencesKey("autoUploadLikedToDrive")

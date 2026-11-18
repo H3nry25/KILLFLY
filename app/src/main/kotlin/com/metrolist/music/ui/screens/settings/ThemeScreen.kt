@@ -82,6 +82,9 @@ import com.metrolist.music.ui.theme.MetrolistTheme
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.Brush
+import com.metrolist.music.constants.LiquidGlassBlackKey
+import com.metrolist.music.ui.theme.LiquidGlassBlackSeedColor
 
 data class ThemePalette(
     val nameRes: Int,
@@ -90,6 +93,7 @@ data class ThemePalette(
 
 val PaletteColors = listOf(
     ThemePalette(R.string.palette_dynamic, Color.Transparent), // Sentinel for System/Dynamic colors
+    ThemePalette(R.string.palette_liquid_glass_black, LiquidGlassBlackSeedColor),
     ThemePalette(R.string.palette_crimson, Color(0xFFEC5464)), // Slightly shifted from DefaultThemeColor (0xFFED5564) to avoid conflict
     ThemePalette(R.string.palette_rose, Color(0xFFD81B60)),
     ThemePalette(R.string.palette_purple, Color(0xFF8E24AA)),
@@ -118,6 +122,7 @@ fun ThemeScreen(
 ) {
     val (darkMode, onDarkModeChange) = rememberEnumPreference(DarkModeKey, DarkMode.AUTO)
     val (pureBlack, onPureBlackChangeRaw) = rememberPreference(PureBlackKey, defaultValue = false)
+    val (liquidGlassBlack, onLiquidGlassBlackChange) = rememberPreference(LiquidGlassBlackKey, defaultValue = true)
     val (_, onPureBlackMiniPlayerChange) = rememberPreference(
         PureBlackMiniPlayerKey,
         defaultValue = false
@@ -153,6 +158,8 @@ fun ThemeScreen(
             onDarkModeChange = onDarkModeChange,
             pureBlack = pureBlack,
             onPureBlackChange = onPureBlackChange,
+            liquidGlassBlack = liquidGlassBlack,
+            onLiquidGlassBlackChange = onLiquidGlassBlackChange,
             selectedThemeColor = selectedThemeColor,
             onSelectedThemeColorChange = handleColorSelection
         )
@@ -163,6 +170,8 @@ fun ThemeScreen(
             onDarkModeChange = onDarkModeChange,
             pureBlack = pureBlack,
             onPureBlackChange = onPureBlackChange,
+            liquidGlassBlack = liquidGlassBlack,
+            onLiquidGlassBlackChange = onLiquidGlassBlackChange,
             selectedThemeColor = selectedThemeColor,
             onSelectedThemeColorChange = handleColorSelection
         )
@@ -188,6 +197,8 @@ fun PortraitThemeLayout(
     onDarkModeChange: (DarkMode) -> Unit,
     pureBlack: Boolean,
     onPureBlackChange: (Boolean) -> Unit,
+    liquidGlassBlack: Boolean,
+    onLiquidGlassBlackChange: (Boolean) -> Unit,
     selectedThemeColor: Color,
     onSelectedThemeColorChange: (Color) -> Unit
 ) {
@@ -208,6 +219,7 @@ fun PortraitThemeLayout(
             ThemeMockupPortrait(
                 darkMode = darkMode,
                 pureBlack = pureBlack,
+                liquidGlassBlack = liquidGlassBlack,
                 themeColor = selectedThemeColor
             )
         }
@@ -219,6 +231,8 @@ fun PortraitThemeLayout(
             onDarkModeChange = onDarkModeChange,
             pureBlack = pureBlack,
             onPureBlackChange = onPureBlackChange,
+            liquidGlassBlack = liquidGlassBlack,
+            onLiquidGlassBlackChange = onLiquidGlassBlackChange,
             selectedThemeColor = selectedThemeColor,
             onSelectedThemeColorChange = onSelectedThemeColorChange
         )
@@ -234,6 +248,8 @@ fun LandscapeThemeLayout(
     onDarkModeChange: (DarkMode) -> Unit,
     pureBlack: Boolean,
     onPureBlackChange: (Boolean) -> Unit,
+    liquidGlassBlack: Boolean,
+    onLiquidGlassBlackChange: (Boolean) -> Unit,
     selectedThemeColor: Color,
     onSelectedThemeColorChange: (Color) -> Unit
 ) {
@@ -259,6 +275,7 @@ fun LandscapeThemeLayout(
                 ThemeMockup(
                     darkMode = darkMode,
                     pureBlack = pureBlack,
+                    liquidGlassBlack = liquidGlassBlack,
                     themeColor = selectedThemeColor
                 )
             }
@@ -276,6 +293,8 @@ fun LandscapeThemeLayout(
                 onDarkModeChange = onDarkModeChange,
                 pureBlack = pureBlack,
                 onPureBlackChange = onPureBlackChange,
+                liquidGlassBlack = liquidGlassBlack,
+                onLiquidGlassBlackChange = onLiquidGlassBlackChange,
                 selectedThemeColor = selectedThemeColor,
                 onSelectedThemeColorChange = onSelectedThemeColorChange
             )
@@ -291,6 +310,8 @@ fun ThemeControls(
     onDarkModeChange: (DarkMode) -> Unit,
     pureBlack: Boolean,
     onPureBlackChange: (Boolean) -> Unit,
+    liquidGlassBlack: Boolean,
+    onLiquidGlassBlackChange: (Boolean) -> Unit,
     selectedThemeColor: Color,
     onSelectedThemeColorChange: (Color) -> Unit
 ) {
@@ -324,10 +345,13 @@ fun ThemeControls(
                     ModeCircle(
                         darkMode = darkMode,
                         pureBlack = pureBlack,
+                        liquidGlassBlack = liquidGlassBlack,
                         targetMode = DarkMode.AUTO,
                         targetPureBlack = pureBlack,
+                        targetLiquidGlassBlack = false,
                         onClick = {
                             onDarkModeChange(DarkMode.AUTO)
+                            onLiquidGlassBlackChange(false)
                         },
                         showIcon = true
                     )
@@ -340,15 +364,18 @@ fun ThemeControls(
                             .background(MaterialTheme.colorScheme.outlineVariant)
                     )
                     
-                    // Manual modes (Light, Dark, Pure Black)
+                    // Manual modes (Light, Dark, Pure Black, Liquid Glass Black)
                     ModeCircle(
                         darkMode = darkMode,
                         pureBlack = pureBlack,
+                        liquidGlassBlack = liquidGlassBlack,
                         targetMode = DarkMode.OFF,
                         targetPureBlack = false,
+                        targetLiquidGlassBlack = false,
                         onClick = {
                             onDarkModeChange(DarkMode.OFF)
                             onPureBlackChange(false)
+                            onLiquidGlassBlackChange(false)
                         },
                         showIcon = false
                     )
@@ -356,11 +383,14 @@ fun ThemeControls(
                     ModeCircle(
                         darkMode = darkMode,
                         pureBlack = pureBlack,
+                        liquidGlassBlack = liquidGlassBlack,
                         targetMode = DarkMode.ON,
                         targetPureBlack = false,
+                        targetLiquidGlassBlack = false,
                         onClick = {
                             onDarkModeChange(DarkMode.ON)
                             onPureBlackChange(false)
+                            onLiquidGlassBlackChange(false)
                         },
                         showIcon = false
                     )
@@ -368,11 +398,29 @@ fun ThemeControls(
                     ModeCircle(
                         darkMode = darkMode,
                         pureBlack = pureBlack,
+                        liquidGlassBlack = liquidGlassBlack,
                         targetMode = DarkMode.ON,
                         targetPureBlack = true,
+                        targetLiquidGlassBlack = false,
                         onClick = {
                             onDarkModeChange(DarkMode.ON)
                             onPureBlackChange(true)
+                            onLiquidGlassBlackChange(false)
+                        },
+                        showIcon = false
+                    )
+
+                    ModeCircle(
+                        darkMode = darkMode,
+                        pureBlack = pureBlack,
+                        liquidGlassBlack = liquidGlassBlack,
+                        targetMode = DarkMode.ON,
+                        targetPureBlack = false,
+                        targetLiquidGlassBlack = true,
+                        onClick = {
+                            onDarkModeChange(DarkMode.ON)
+                            onPureBlackChange(false)
+                            onLiquidGlassBlackChange(true)
                         },
                         showIcon = false
                     )
@@ -417,14 +465,16 @@ fun ThemeControls(
 fun ModeCircle(
     darkMode: DarkMode,
     pureBlack: Boolean,
+    liquidGlassBlack: Boolean = false,
     targetMode: DarkMode,
     targetPureBlack: Boolean,
+    targetLiquidGlassBlack: Boolean = false,
     showIcon: Boolean,
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
     val isSystemDark = isSystemInDarkTheme()
-    val isSelected = darkMode == targetMode && pureBlack == targetPureBlack
+    val isSelected = darkMode == targetMode && pureBlack == targetPureBlack && liquidGlassBlack == targetLiquidGlassBlack
     
     val effectiveDark = when (targetMode) {
         DarkMode.AUTO -> isSystemDark
@@ -444,6 +494,7 @@ fun ModeCircle(
     }
     
     val fillColor = when {
+        targetLiquidGlassBlack -> Color(0xFF08090E)
         targetPureBlack -> Color.Black
         effectiveDark -> modeColorScheme.surface
         else -> modeColorScheme.surface
@@ -472,6 +523,7 @@ fun ModeCircle(
     val interactionSource = remember { MutableInteractionSource() }
     
     val contentDesc = when {
+        targetLiquidGlassBlack -> stringResource(R.string.cd_liquid_glass_black_mode)
         targetPureBlack -> stringResource(R.string.cd_pure_black_mode)
         targetMode == DarkMode.OFF -> stringResource(R.string.cd_light_mode)
         targetMode == DarkMode.ON -> stringResource(R.string.cd_dark_mode)
@@ -487,6 +539,21 @@ fun ModeCircle(
             }
             .clip(CircleShape)
             .background(fillColor)
+            .then(
+                if (targetLiquidGlassBlack) {
+                    Modifier.border(
+                        width = 1.2.dp,
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color(0xFF70B9FF).copy(alpha = 0.8f),
+                                Color.White.copy(alpha = 0.25f),
+                                Color(0xFF70B9FF).copy(alpha = 0.4f),
+                            )
+                        ),
+                        shape = CircleShape
+                    )
+                } else Modifier
+            )
             .then(
                 if (borderWidth > 0.dp) {
                     Modifier.border(
@@ -535,10 +602,25 @@ fun ModeCircle(
                     Icon(
                         painter = painterResource(R.drawable.check),
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.inversePrimary,
+                        tint = if (targetLiquidGlassBlack) Color(0xFF70B9FF) else MaterialTheme.colorScheme.inversePrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+            targetLiquidGlassBlack -> {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFF70B9FF).copy(alpha = 0.65f),
+                                    Color.Transparent
+                                )
+                            ),
+                            CircleShape
+                        )
+                )
             }
         }
     }
@@ -634,6 +716,37 @@ fun PaletteItem(
                     modifier = Modifier.size(24.dp)
                 )
             }
+        } else if (palette.seedColor == LiquidGlassBlackSeedColor) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF08090E)),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .border(
+                            1.dp,
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF70B9FF),
+                                    Color.White.copy(alpha = 0.4f),
+                                )
+                            ),
+                            CircleShape
+                        )
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFF70B9FF).copy(alpha = 0.6f),
+                                    Color.Transparent,
+                                )
+                            ),
+                            CircleShape
+                        )
+                )
+            }
         } else {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val width = size.width
@@ -665,6 +778,7 @@ fun PaletteItem(
 fun ThemeMockup(
     darkMode: DarkMode,
     pureBlack: Boolean,
+    liquidGlassBlack: Boolean = false,
     themeColor: Color
 ) {
     val isSystemDark = isSystemInDarkTheme()
@@ -677,6 +791,7 @@ fun ThemeMockup(
     MetrolistTheme(
         darkTheme = useDark,
         pureBlack = pureBlack,
+        liquidGlassBlack = liquidGlassBlack,
         themeColor = themeColor
     ) {
         Card(
@@ -773,6 +888,7 @@ fun ThemeMockup(
 fun ThemeMockupPortrait(
     darkMode: DarkMode,
     pureBlack: Boolean,
+    liquidGlassBlack: Boolean = false,
     themeColor: Color
 ) {
     val isSystemDark = isSystemInDarkTheme()
@@ -785,6 +901,7 @@ fun ThemeMockupPortrait(
     MetrolistTheme(
         darkTheme = useDark,
         pureBlack = pureBlack,
+        liquidGlassBlack = liquidGlassBlack,
         themeColor = themeColor
     ) {
         Card(

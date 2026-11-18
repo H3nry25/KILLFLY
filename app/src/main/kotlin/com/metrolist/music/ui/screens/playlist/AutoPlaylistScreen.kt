@@ -35,6 +35,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -85,7 +86,9 @@ import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.util.fastSumBy
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import timber.log.Timber
+import androidx.core.net.toUri
 import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
@@ -94,6 +97,7 @@ import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoDownloadOnLikeKey
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.SongSortDescendingKey
 import com.metrolist.music.constants.SongSortType
@@ -109,6 +113,7 @@ import com.metrolist.music.ui.component.DraggableScrollbar
 import com.metrolist.music.ui.component.EmptyPlaceholder
 import com.metrolist.music.ui.component.HideOnScrollFAB
 import com.metrolist.music.ui.component.IconButton
+import com.metrolist.music.ui.component.SyncServerDialog
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.SongListItem
 import com.metrolist.music.ui.component.SortHeader
@@ -214,6 +219,7 @@ fun AutoPlaylistScreen(
             SongSortType.CREATE_DATE,
         )
     val (sortDescending, onSortDescendingChange) = rememberPreference(SongSortDescendingKey, true)
+    val (autoDownloadOnLike, onAutoDownloadOnLikeChange) = rememberPreference(AutoDownloadOnLikeKey, false)
 
     val downloadUtil = LocalDownloadUtil.current
     var downloadState by remember {
@@ -224,6 +230,7 @@ fun AutoPlaylistScreen(
 
     // Upload state
     var showUploadDialog by remember { mutableStateOf(false) }
+    var showSyncServerDialog by rememberSaveable { mutableStateOf(false) }
     var uploadProgress by remember { mutableFloatStateOf(0f) }
     var currentUploadIndex by remember { mutableIntStateOf(0) }
     var totalUploads by remember { mutableIntStateOf(0) }
@@ -353,10 +360,11 @@ fun AutoPlaylistScreen(
             downloadState =
                 if (songs?.all { downloads[it.song.id]?.state == Download.STATE_COMPLETED } == true) {
                     Download.STATE_COMPLETED
-                } else if (songs?.all {
-                        downloads[it.song.id]?.state == Download.STATE_QUEUED ||
-                            downloads[it.song.id]?.state == Download.STATE_DOWNLOADING ||
-                            downloads[it.song.id]?.state == Download.STATE_COMPLETED
+                } else if (songs?.any {
+                        downloads[it.song.id]?.state in listOf(
+                            Download.STATE_QUEUED,
+                            Download.STATE_DOWNLOADING,
+                        )
                     } == true
                 ) {
                     Download.STATE_DOWNLOADING
@@ -390,6 +398,9 @@ fun AutoPlaylistScreen(
                 TextButton(
                     onClick = {
                         showRemoveDownloadDialog = false
+                        if (viewModel.playlist == "liked") {
+                            onAutoDownloadOnLikeChange(false)
+                        }
                         songs!!.forEach { song ->
                             DownloadService.sendRemoveDownload(
                                 context,
@@ -517,6 +528,9 @@ fun AutoPlaylistScreen(
                                 songs = songs!!,
                                 likeLength = likeLength,
                                 downloadState = downloadState,
+                                isLikedPlaylist = viewModel.playlist == "liked",
+                                autoDownloadOnLike = autoDownloadOnLike,
+                                onAutoDownloadOnLikeChange = onAutoDownloadOnLikeChange,
                                 onShowRemoveDownloadDialog = { showRemoveDownloadDialog = true },
                                 menuState = menuState,
                                 modifier = Modifier.animateItem(),
@@ -794,6 +808,16 @@ fun AutoPlaylistScreen(
                         )
                     }
                 } else if (!isSearching) {
+                    if (playlistType == PlaylistType.DOWNLOAD) {
+                        IconButton(
+                            onClick = { showSyncServerDialog = true },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.sync),
+                                contentDescription = stringResource(R.string.sync_with_iphone),
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { isSearching = true },
                     ) {
@@ -805,6 +829,9 @@ fun AutoPlaylistScreen(
                 }
             },
         )
+        if (showSyncServerDialog) {
+            SyncServerDialog(onDismiss = { showSyncServerDialog = false })
+        }
     }
 }
 
@@ -814,6 +841,9 @@ private fun AutoPlaylistHeader(
     songs: List<Song>,
     likeLength: Int,
     downloadState: Int,
+    isLikedPlaylist: Boolean,
+    autoDownloadOnLike: Boolean,
+    onAutoDownloadOnLikeChange: (Boolean) -> Unit,
     onShowRemoveDownloadDialog: () -> Unit,
     menuState: com.metrolist.music.ui.component.MenuState,
     modifier: Modifier = Modifier,
@@ -821,6 +851,9 @@ private fun AutoPlaylistHeader(
     val playerConnection = LocalPlayerConnection.current ?: return
     val context = LocalContext.current
     val downloadUtil = LocalDownloadUtil.current
+    val isAutoDownloadActive = isLikedPlaylist && autoDownloadOnLike
+    val isCompleted = downloadState == Download.STATE_COMPLETED || (isAutoDownloadActive && downloadState != Download.STATE_DOWNLOADING)
+    val isDownloading = downloadState == Download.STATE_DOWNLOADING
 
     Column(
         modifier =
@@ -879,6 +912,48 @@ private fun AutoPlaylistHeader(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
         )
+
+        if (isCompleted || isDownloading) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    if (isDownloading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = stringResource(R.string.playlist_downloading),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.offline),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = stringResource(R.string.playlist_downloaded_auto_active),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -945,52 +1020,42 @@ private fun AutoPlaylistHeader(
             }
 
             // Download Button next to Play button
-            val downloadIcon = when (downloadState) {
-                Download.STATE_COMPLETED -> R.drawable.offline
-                Download.STATE_DOWNLOADING -> R.drawable.download
+            val downloadIcon = when {
+                isCompleted -> R.drawable.offline
+                isDownloading -> R.drawable.download
                 else -> R.drawable.download
             }
-            val downloadTint = if (downloadState == Download.STATE_COMPLETED) {
+            val downloadTint = if (isCompleted) {
                 MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             }
+            val downloadContainerColor = if (isCompleted) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
             Surface(
                 onClick = {
-                    when (downloadState) {
-                        Download.STATE_COMPLETED -> {
+                    when {
+                        isCompleted -> {
                             onShowRemoveDownloadDialog()
                         }
-                        Download.STATE_DOWNLOADING -> {
-                            songs.forEach { song ->
-                                DownloadService.sendRemoveDownload(
-                                    context,
-                                    ExoDownloadService::class.java,
-                                    song.song.id,
-                                    false,
-                                )
-                            }
+                        isDownloading -> {
+                            onShowRemoveDownloadDialog()
                         }
                         else -> {
+                            if (isLikedPlaylist) {
+                                onAutoDownloadOnLikeChange(true)
+                            }
                             songs.forEach { song ->
-                                val downloadRequest =
-                                    DownloadRequest
-                                        .Builder(song.song.id, song.song.id.toUri())
-                                        .setCustomCacheKey(song.song.id)
-                                        .setData(song.song.title.toByteArray())
-                                        .build()
-                                DownloadService.sendAddDownload(
-                                    context,
-                                    ExoDownloadService::class.java,
-                                    downloadRequest,
-                                    false,
-                                )
+                                downloadUtil.download(song)
                             }
                         }
                     }
                 },
                 shape = androidx.compose.foundation.shape.CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = downloadContainerColor,
                 modifier = Modifier.size(48.dp),
             ) {
                 Box(
@@ -1018,23 +1083,19 @@ private fun AutoPlaylistHeader(
                                 )
                             },
                             onDownload = {
-                                when (downloadState) {
-                                    Download.STATE_COMPLETED -> {
+                                when {
+                                    isCompleted -> {
                                         onShowRemoveDownloadDialog()
                                     }
 
-                                    Download.STATE_DOWNLOADING -> {
-                                        songs.forEach { song ->
-                                            DownloadService.sendRemoveDownload(
-                                                context,
-                                                ExoDownloadService::class.java,
-                                                song.song.id,
-                                                false,
-                                            )
-                                        }
+                                    isDownloading -> {
+                                        onShowRemoveDownloadDialog()
                                     }
 
                                     else -> {
+                                        if (isLikedPlaylist) {
+                                            onAutoDownloadOnLikeChange(true)
+                                        }
                                         songs.forEach { downloadUtil.download(it) }
                                     }
                                 }

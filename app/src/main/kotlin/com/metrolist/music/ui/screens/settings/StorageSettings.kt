@@ -60,6 +60,8 @@ import com.metrolist.music.ui.component.ActionPromptDialog
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.Material3SettingsGroup
 import com.metrolist.music.ui.component.Material3SettingsItem
+import com.metrolist.music.ui.component.SyncServerDialog
+import com.metrolist.music.utils.LocalMusicServer
 import android.text.format.Formatter
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.rememberPreference
@@ -108,6 +110,7 @@ fun StorageSettings(
     )
 
     var clearDownloads by remember { mutableStateOf(false) }
+    var showSyncServerDialog by remember { mutableStateOf(false) }
     var clearCacheDialog by remember { mutableStateOf(false) }
     var clearImageCacheDialog by remember { mutableStateOf(false) }
 
@@ -316,6 +319,19 @@ fun StorageSettings(
                         description = {
                             Text(text = Formatter.formatShortFileSize(context, downloadCacheSize))
                         },
+                    ),
+                    Material3SettingsItem(
+                        icon = painterResource(R.drawable.sync),
+                        title = { Text(stringResource(R.string.sync_with_iphone)) },
+                        description = {
+                            Text(
+                                if (LocalMusicServer.isRunning.value)
+                                    stringResource(R.string.sync_server_running_at, LocalMusicServer.serverUrl.value.orEmpty())
+                                else
+                                    stringResource(R.string.sync_server_desc)
+                            )
+                        },
+                        onClick = { showSyncServerDialog = true },
                     ),
                     Material3SettingsItem(
                         icon = painterResource(R.drawable.clear_all),
@@ -558,4 +574,8 @@ fun StorageSettings(
             }
         },
     )
+
+    if (showSyncServerDialog) {
+        SyncServerDialog(onDismiss = { showSyncServerDialog = false })
+    }
 }

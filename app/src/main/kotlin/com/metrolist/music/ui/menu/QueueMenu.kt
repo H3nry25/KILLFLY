@@ -61,6 +61,7 @@ import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.LocalSyncUtils
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoDownloadOnLikeKey
 import com.metrolist.music.constants.ListItemHeight
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.extensions.toMediaItem
@@ -68,6 +69,7 @@ import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.ExoDownloadService
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.ui.component.ActionPromptDialog
 import com.metrolist.music.ui.component.BottomSheetState
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.Material3MenuGroup
@@ -75,6 +77,7 @@ import com.metrolist.music.ui.component.Material3MenuItemData
 import com.metrolist.music.ui.component.MediaMetadataListItem
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
+import com.metrolist.music.utils.rememberPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -96,6 +99,7 @@ fun QueueMenu(
     val syncUtils = LocalSyncUtils.current
 
     val downloadUtil = LocalDownloadUtil.current
+    val (autoDownloadOnLike) = rememberPreference(AutoDownloadOnLikeKey, false)
     val librarySong by database.song(mediaMetadata.id).collectAsStateWithLifecycle(initialValue = null)
     val download by downloadUtil.getDownload(mediaMetadata.id)
         .collectAsStateWithLifecycle(initialValue = null)
@@ -113,6 +117,34 @@ fun QueueMenu(
 
     var showChoosePlaylistDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showRemoveDownloadDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    if (showRemoveDownloadDialog) {
+        ActionPromptDialog(
+            title = stringResource(R.string.remove_download),
+            onDismiss = { showRemoveDownloadDialog = false },
+            onConfirm = {
+                DownloadService.sendRemoveDownload(
+                    context,
+                    ExoDownloadService::class.java,
+                    mediaMetadata.id,
+                    false,
+                )
+                showRemoveDownloadDialog = false
+            },
+            onCancel = { showRemoveDownloadDialog = false },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_download_confirm),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            },
+        )
     }
 
     AddToPlaylistDialog(
@@ -232,6 +264,9 @@ fun QueueMenu(
                                     update(s)
                                 }
                                 syncUtils.likeSong(s)
+                                if (autoDownloadOnLike && s.liked) {
+                                    downloadUtil.download(s.id)
+                                }
                             }
                         }
                     }
@@ -397,12 +432,7 @@ fun QueueMenu(
                                     )
                                 },
                                 onClick = {
-                                    DownloadService.sendRemoveDownload(
-                                        context,
-                                        ExoDownloadService::class.java,
-                                        mediaMetadata.id,
-                                        false,
-                                    )
+                                    showRemoveDownloadDialog = true
                                 }
                             )
                         }
@@ -417,12 +447,7 @@ fun QueueMenu(
                                     )
                                 },
                                 onClick = {
-                                    DownloadService.sendRemoveDownload(
-                                        context,
-                                        ExoDownloadService::class.java,
-                                        mediaMetadata.id,
-                                        false,
-                                    )
+                                    showRemoveDownloadDialog = true
                                 }
                             )
                         }

@@ -1286,7 +1286,6 @@ fun HomeScreen(
                 item(key = "home_top_header") {
                     if (showAccountDialog) {
                         AccountSettingsDialog(
-                            navController = navController,
                             onDismiss = {
                                 showAccountDialog = false
                                 viewModel.refresh()

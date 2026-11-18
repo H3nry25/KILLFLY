@@ -56,13 +56,14 @@ import com.metrolist.music.R
 import com.metrolist.music.constants.ChipSortTypeKey
 import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.DefaultOpenTabKey
-import com.metrolist.music.constants.DensityScale
 import com.metrolist.music.constants.DensityScaleKey
+import com.metrolist.music.constants.DensityScale
 import com.metrolist.music.constants.DynamicThemeKey
 import com.metrolist.music.constants.EnableDynamicIconKey
 import com.metrolist.music.constants.EnableHighRefreshRateKey
 import com.metrolist.music.constants.EnableLandscapeScalingKey
 import com.metrolist.music.constants.ExperimentalLyricsKey
+import com.metrolist.music.constants.TvmodeKey
 import com.metrolist.music.constants.GridItemSize
 import com.metrolist.music.constants.GridItemsSizeKey
 import com.metrolist.music.constants.HidePlayerThumbnailKey
@@ -281,6 +282,11 @@ fun AppearanceSettings(
         rememberPreference(
             ListenTogetherInTopBarKey,
             defaultValue = true,
+        )
+    val (tvMode, onTvModeChange) =
+        rememberPreference(
+            TvmodeKey,
+            defaultValue = false,
         )
 
     val (swipeToSong, onSwipeToSongChange) =
@@ -550,6 +556,7 @@ fun AppearanceSettings(
             valueText = {
                 when (it) {
                     PlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
+                    PlayerBackgroundStyle.LIQUID_GLASS -> stringResource(R.string.liquid_glass)
                     PlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
                     PlayerBackgroundStyle.BLUR -> stringResource(R.string.player_background_blur)
                 }
@@ -570,6 +577,7 @@ fun AppearanceSettings(
             valueText = {
                 when (it) {
                     MiniPlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
+                    MiniPlayerBackgroundStyle.LIQUID_GLASS -> stringResource(R.string.liquid_glass)
                     MiniPlayerBackgroundStyle.TRANSPARENT -> stringResource(R.string.transparent)
                     MiniPlayerBackgroundStyle.BLUR -> stringResource(R.string.player_background_blur)
                     MiniPlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
@@ -1075,6 +1083,7 @@ fun AppearanceSettings(
                                         } else {
                                             when (miniPlayerBackground) {
                                                 MiniPlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
+                                                MiniPlayerBackgroundStyle.LIQUID_GLASS -> stringResource(R.string.liquid_glass)
                                                 MiniPlayerBackgroundStyle.TRANSPARENT -> stringResource(R.string.transparent)
                                                 MiniPlayerBackgroundStyle.BLUR -> stringResource(R.string.player_background_blur)
                                                 MiniPlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
@@ -1131,6 +1140,7 @@ fun AppearanceSettings(
                             Text(
                                 when (playerBackground) {
                                     PlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
+                                    PlayerBackgroundStyle.LIQUID_GLASS -> stringResource(R.string.liquid_glass)
                                     PlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
                                     PlayerBackgroundStyle.BLUR -> stringResource(R.string.player_background_blur)
                                 },
@@ -1696,6 +1706,26 @@ fun AppearanceSettings(
                             Text(DensityScale.fromValue(densityScale).label)
                         },
                         onClick = { showDensityScaleDialog = true },
+                    ),
+                    Material3SettingsItem(
+                        title = { Text(stringResource(R.string.tv_mode)) },
+                        description = { Text(stringResource(R.string.tv_mode_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = tvMode,
+                                onCheckedChange = onTvModeChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter =
+                                            painterResource(
+                                                id = if (tvMode) R.drawable.check else R.drawable.close,
+                                            ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                                    )
+                                },
+                            )
+                        },
                     ),
                 ),
         )

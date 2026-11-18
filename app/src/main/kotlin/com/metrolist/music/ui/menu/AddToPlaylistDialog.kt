@@ -32,11 +32,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.metrolist.innertube.utils.parseCookieString
 import com.metrolist.music.LocalDatabase
+import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.R
 import com.metrolist.music.constants.AddToPlaylistPosition
 import com.metrolist.music.constants.AddToPlaylistPositionKey
 import com.metrolist.music.constants.AddToPlaylistSortDescendingKey
 import com.metrolist.music.constants.AddToPlaylistSortTypeKey
+import com.metrolist.music.constants.AutoDownloadPlaylistsKey
 import com.metrolist.music.constants.InnerTubeCookieKey
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.constants.PlaylistSortType
@@ -128,6 +130,9 @@ fun AddToPlaylistDialog(
         mutableStateOf<Set<String>>(emptySet())
     }
 
+    val downloadUtil = LocalDownloadUtil.current
+    val (autoDownloadPlaylists) = rememberPreference(AutoDownloadPlaylistsKey, emptySet())
+
     suspend fun addSongsAndSync(targetPlaylist: Playlist, ids: List<String>) {
         database.addSongsToPlaylist(
             targetPlaylist,
@@ -136,6 +141,11 @@ fun AddToPlaylistDialog(
         )
         targetPlaylist.playlist.browseId?.let { browseId ->
             syncUtils.scheduleAddToPlaylist(browseId, targetPlaylist.id, ids)
+        }
+        if (targetPlaylist.id in autoDownloadPlaylists) {
+            ids.forEach { songId ->
+                downloadUtil.download(songId)
+            }
         }
     }
 

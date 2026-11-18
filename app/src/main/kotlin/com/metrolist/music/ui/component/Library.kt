@@ -20,11 +20,13 @@ import com.metrolist.music.R
 import com.metrolist.music.db.entities.Album
 import com.metrolist.music.db.entities.Artist
 import com.metrolist.music.db.entities.Playlist
+import com.metrolist.music.db.entities.Song
 import com.metrolist.music.ui.menu.AlbumMenu
 import com.metrolist.music.ui.menu.ArtistMenu
 import com.metrolist.music.ui.menu.PlaylistMenu
 import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import kotlinx.coroutines.CoroutineScope
+import androidx.media3.exoplayer.offline.Download
 import androidx.navigation.NavController
 
 @Composable
@@ -172,11 +174,17 @@ fun LibraryPlaylistListItem(
     menuState: MenuState,
     coroutineScope: CoroutineScope,
     playlist: Playlist,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    songs: List<Song> = emptyList(),
+    allDownloads: Map<String, Download> = emptyMap(),
+    isAutoDownloadTarget: Boolean = false
 ) {
     val navController = LocalNavController.current
     PlaylistListItem(
     playlist = playlist,
+    songs = songs,
+    allDownloads = allDownloads,
+    isAutoDownloadTarget = isAutoDownloadTarget,
     trailingContent = {
         androidx.compose.material3.IconButton(
             onClick = {
@@ -241,12 +249,18 @@ fun LibraryPlaylistGridItem(
     menuState: MenuState,
     coroutineScope: CoroutineScope,
     playlist: Playlist,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    songs: List<Song> = emptyList(),
+    allDownloads: Map<String, Download> = emptyMap(),
+    isAutoDownloadTarget: Boolean = false
 ) {
     val navController = LocalNavController.current
     PlaylistGridItem(
     playlist = playlist,
     fillMaxWidth = true,
+    songs = songs,
+    allDownloads = allDownloads,
+    isAutoDownloadTarget = isAutoDownloadTarget,
     modifier = modifier
         .fillMaxWidth()
         .combinedClickable(

@@ -159,6 +159,7 @@ import com.metrolist.music.constants.PauseListenHistoryKey
 import com.metrolist.music.constants.PauseSearchHistoryKey
 import com.metrolist.music.constants.PreferredLyricsProvider
 import com.metrolist.music.constants.PreferredLyricsProviderKey
+import com.metrolist.music.constants.LiquidGlassBlackKey
 import com.metrolist.music.constants.PureBlackKey
 import com.metrolist.music.constants.SYSTEM_DEFAULT
 import com.metrolist.music.constants.SelectedThemeColorKey
@@ -601,11 +602,14 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        val (liquidGlassBlack) = rememberPreference(LiquidGlassBlackKey, defaultValue = true)
         val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
         val isSystemInDarkTheme = isSystemInDarkTheme()
         val useDarkTheme =
-            remember(darkTheme, isSystemInDarkTheme) {
-                if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme else darkTheme == DarkMode.ON
+            remember(darkTheme, isSystemInDarkTheme, liquidGlassBlack) {
+                if (liquidGlassBlack) true
+                else if (darkTheme == DarkMode.AUTO) isSystemInDarkTheme
+                else darkTheme == DarkMode.ON
             }
 
         LaunchedEffect(useDarkTheme) {
@@ -686,6 +690,7 @@ class MainActivity : FragmentActivity() {
         MetrolistTheme(
             darkTheme = useDarkTheme,
             pureBlack = pureBlack,
+            liquidGlassBlack = liquidGlassBlack,
             themeColor = themeColor,
         ) {
             val currentDensity = LocalDensity.current
@@ -718,7 +723,7 @@ class MainActivity : FragmentActivity() {
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface),
+                        .background(if (pureBlack) Color.Black else if (liquidGlassBlack) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface),
             ) {
                 val density = LocalDensity.current
                 val configuration = LocalWindowInfo.current
@@ -1220,6 +1225,7 @@ class MainActivity : FragmentActivity() {
                                         currentRoute = currentRoute,
                                         onItemClick = onNavItemClick,
                                         pureBlack = pureBlack,
+                                        liquidGlassBlack = liquidGlassBlack,
                                         slimNav = slimNav,
                                         onSearchLongClick = onSearchLongClick,
                                         onHomeLongHold = { showAccountDialog = true },

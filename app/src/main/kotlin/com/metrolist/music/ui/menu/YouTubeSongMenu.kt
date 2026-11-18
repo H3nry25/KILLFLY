@@ -64,6 +64,7 @@ import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.LocalSyncUtils
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoDownloadOnLikeKey
 import com.metrolist.music.constants.ListItemHeight
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.constants.ThumbnailCornerRadius
@@ -74,10 +75,12 @@ import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.ExoDownloadService
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.ui.component.ActionPromptDialog
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
 import com.metrolist.music.ui.component.Material3MenuGroup
 import com.metrolist.music.ui.component.Material3MenuItemData
+import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
 import com.metrolist.music.ui.utils.ShowMediaInfo
@@ -105,6 +108,7 @@ fun YouTubeSongMenu(
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val downloadUtil = LocalDownloadUtil.current
+    val (autoDownloadOnLike) = rememberPreference(AutoDownloadOnLikeKey, false)
     val librarySong by database.song(song.id).collectAsStateWithLifecycle(initialValue = null)
     val download by downloadUtil.getDownload(song.id).collectAsStateWithLifecycle(initialValue = null)
     val coroutineScope = rememberCoroutineScope()
@@ -127,6 +131,7 @@ fun YouTubeSongMenu(
         mutableStateOf(false)  
     }  
 
+    var showRemoveDownloadDialog by rememberSaveable { mutableStateOf(false) }
     var showAddToSpotifyPlaylist by rememberSaveable { mutableStateOf(false) }
     val spotifyMapper = remember {
         com.metrolist.music.playback.SpotifyYouTubeMapper(database)
@@ -141,6 +146,30 @@ fun YouTubeSongMenu(
         mapper = spotifyMapper,
         onDismiss = { showAddToSpotifyPlaylist = false },
     )
+
+    if (showRemoveDownloadDialog) {
+        ActionPromptDialog(
+            title = stringResource(R.string.remove_download),
+            onDismiss = { showRemoveDownloadDialog = false },
+            onConfirm = {
+                DownloadService.sendRemoveDownload(
+                    context,
+                    ExoDownloadService::class.java,
+                    song.id,
+                    false,
+                )
+                showRemoveDownloadDialog = false
+            },
+            onCancel = { showRemoveDownloadDialog = false },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_download_confirm),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            },
+        )
+    }
 
     AddToPlaylistDialog(
         isVisible = showChoosePlaylistDialog,
@@ -275,6 +304,9 @@ fun YouTubeSongMenu(
                                     update(s)
                                 }
                                 syncUtils.likeSong(s)
+                                if (autoDownloadOnLike && s.liked) {
+                                    downloadUtil.download(song)
+                                }
                             }
                         }
                     }
@@ -620,12 +652,7 @@ fun YouTubeSongMenu(
                                     )
                                 },
                                 onClick = {
-                                    DownloadService.sendRemoveDownload(
-                                        context,
-                                        ExoDownloadService::class.java,
-                                        song.id,
-                                        false,
-                                    )
+                                    showRemoveDownloadDialog = true
                                 }
                             )
                         }
@@ -639,12 +666,7 @@ fun YouTubeSongMenu(
                                     )
                                 },
                                 onClick = {
-                                    DownloadService.sendRemoveDownload(
-                                        context,
-                                        ExoDownloadService::class.java,
-                                        song.id,
-                                        false,
-                                    )
+                                    showRemoveDownloadDialog = true
                                 }
                             )
                         }

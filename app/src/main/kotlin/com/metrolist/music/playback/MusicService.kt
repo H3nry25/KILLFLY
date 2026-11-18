@@ -125,6 +125,9 @@ import com.metrolist.music.qobuz.QobuzMatchOverride
 import com.metrolist.music.qobuz.QobuzMatchOverrides
 import com.metrolist.spotify.models.SpotifyTrack
 import com.metrolist.music.constants.AutoDownloadOnLikeKey
+import com.metrolist.music.constants.AutoUploadLikedToDriveKey
+import com.metrolist.music.utils.GoogleDriveUploader
+import com.metrolist.music.constants.AutoDownloadPlaylistsKey
 import com.metrolist.music.constants.AutoLoadMoreKey
 import com.metrolist.music.constants.AutoSkipNextOnErrorKey
 import com.metrolist.music.constants.AutoplayKey
@@ -2432,6 +2435,16 @@ class MusicService :
                     if (dataStore.get(AutoDownloadOnLikeKey, false) && song.liked) {
                         downloadUtil.download(song.id)
                     }
+
+                    if (song.liked && dataStore.get(AutoUploadLikedToDriveKey, true)) {
+                        GoogleDriveUploader.uploadSongInBackground(
+                            context = this@MusicService,
+                            songId = song.id,
+                            downloadCache = downloadUtil.downloadCache,
+                            playerCache = downloadUtil.playerCache,
+                            database = database,
+                        )
+                    }
                 }
                 currentMediaMetadata.value = player.currentMetadata
             }
@@ -2466,6 +2479,9 @@ class MusicService :
                     listOf(currentSong.id to null),
                     prepend = addToPlaylistPosition.prepend,
                 )
+                if (dataStore.get(AutoDownloadPlaylistsKey, emptySet<String>()).contains(targetPlaylist.id)) {
+                    downloadUtil.download(currentSong.id)
+                }
             }
         }
     }
@@ -3826,29 +3842,18 @@ class MusicService :
         incrementRetryCount(mediaId)
 
         // Clear the cached URL
-        songUrlCache.remove(mediaId)
+        songUrlCache.invalidate(mediaId)
         bypassCacheForQualityChange.add(mediaId)
         Timber.tag(TAG).d("Cleared cached URL for $mediaId")
 
-        // Clear decryption caches
-        try {
-            YTPlayerUtils.forceRefreshForVideo(mediaId)
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to clear decryption caches")
-        }
-
-        // A 403 can also mean the cipher produced a wrong-but-non-throwing signature from a
-        // stale/wrong player config — invisible to the cipher's own exception-retry. Ask it to
-        // re-fetch its config (rate-limited); if that corrects the table, PlayerConfigStore's
-        // configEpoch advances and the cipher rebuilds its WebView on the next decipher, so the
-        // retry below re-resolves the URL with the corrected recipe — no app restart needed.
         scope.launch {
             try {
-                if (CipherDeobfuscator.onStreamRejected()) {
+                if (InnerTubeXPlayer.refreshAfterStreamRejection()) {
                     Timber.tag(TAG).d("Player config changed after stream rejection for $mediaId")
+                    InnerTubeXPlayer.clearStreamClientFailures()
                 }
             } catch (e: Exception) {
-                Timber.tag(TAG).e(e, "onStreamRejected failed for $mediaId")
+                Timber.tag(TAG).e(e, "refreshAfterStreamRejection failed for $mediaId")
             }
         }
         retryJob?.cancel()

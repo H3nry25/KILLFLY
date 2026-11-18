@@ -60,6 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -184,7 +186,7 @@ private fun NewMiniPlayer(
     // Theme settings - these rarely change
     val miniPlayerBackground by rememberEnumPreference(
         MiniPlayerBackgroundStyleKey,
-        defaultValue = MiniPlayerBackgroundStyle.DEFAULT,
+        defaultValue = MiniPlayerBackgroundStyle.LIQUID_GLASS,
     )
     val context = LocalContext.current
     var gradientColors by remember { mutableStateOf<List<Color>>(emptyList()) }
@@ -291,9 +293,13 @@ private fun NewMiniPlayer(
         }
     }
 
+    val isLiquidGlass = miniPlayerBackground == MiniPlayerBackgroundStyle.LIQUID_GLASS ||
+        miniPlayerBackground == MiniPlayerBackgroundStyle.DEFAULT
+
     // Memoize colors
     val backgroundColor = when (miniPlayerBackground) {
-        MiniPlayerBackgroundStyle.DEFAULT    -> MaterialTheme.colorScheme.surfaceContainer
+        MiniPlayerBackgroundStyle.DEFAULT,
+        MiniPlayerBackgroundStyle.LIQUID_GLASS -> if (useDarkTheme) Color(0x66181822) else Color(0x73FFFFFF)
         MiniPlayerBackgroundStyle.TRANSPARENT -> Color.Black.copy(alpha = 0.25f)
         MiniPlayerBackgroundStyle.BLUR       -> MaterialTheme.colorScheme.surfaceContainer
         MiniPlayerBackgroundStyle.GRADIENT   -> MaterialTheme.colorScheme.surfaceContainer
@@ -305,7 +311,9 @@ private fun NewMiniPlayer(
 
     val primaryColor = if (forceLightColors) Color.White else MaterialTheme.colorScheme.primary
     val outlineColor = if (forceLightColors) Color.White else MaterialTheme.colorScheme.outline
-    val onSurfaceColor = if (forceLightColors) Color.White else MaterialTheme.colorScheme.onSurface
+    val onSurfaceColor = if (isLiquidGlass) {
+        if (useDarkTheme) Color.White else Color(0xFF1C1B1F)
+    } else if (forceLightColors) Color.White else MaterialTheme.colorScheme.onSurface
     val errorColor = if (forceLightColors) Color(0xFFFF6B6B) else MaterialTheme.colorScheme.error
 
     Box(
@@ -379,57 +387,158 @@ private fun NewMiniPlayer(
                 },
     ) {
         val interactionSource = remember { MutableInteractionSource() }
+        val glassBorderBrush = if (isLiquidGlass) {
+            Brush.verticalGradient(
+                colors = if (useDarkTheme) listOf(
+                    Color.White.copy(alpha = 0.50f),
+                    Color.White.copy(alpha = 0.16f),
+                    Color.White.copy(alpha = 0.05f),
+                ) else listOf(
+                    Color.White.copy(alpha = 0.95f),
+                    Color.White.copy(alpha = 0.45f),
+                    Color.White.copy(alpha = 0.20f),
+                ),
+            )
+        } else {
+            SolidColor(outlineColor.copy(alpha = 0.3f))
+        }
+
         Box(
             modifier =
                 Modifier
                     .then(if (isTabletLandscape) Modifier.width(500.dp).align(Alignment.Center) else Modifier.fillMaxWidth())
                     .height(64.dp)
                     .offset { IntOffset(offsetXAnimatable.value.roundToInt(), 0) }
+                    .then(
+                        if (isLiquidGlass) {
+                            Modifier.shadow(
+                                elevation = 10.dp,
+                                shape = RoundedCornerShape(32.dp),
+                                spotColor = if (useDarkTheme) Color.Black.copy(alpha = 0.55f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                                ambientColor = Color.Black.copy(alpha = 0.20f),
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
                     .clip(RoundedCornerShape(32.dp))
                     .background(color = backgroundColor)
-                    .border(1.dp, outlineColor.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
+                    .border(1.2.dp, glassBorderBrush, RoundedCornerShape(32.dp))
                     .clickable(
                         interactionSource = interactionSource,
                         indication = LocalIndication.current,
                         onClick = onClick
                     ),
         ) {
-            when (miniPlayerBackground) {
-                MiniPlayerBackgroundStyle.BLUR -> {
+            if (isLiquidGlass) {
+                // Liquid glass background with blurred artwork or rich gradient
+                mediaMetadata?.thumbnailUrl?.let { url ->
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                        mediaMetadata?.thumbnailUrl?.let { url ->
-                            AsyncImage(
-                                model = url,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .blur(60.dp),
-                            )
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.45f)),
-                            )
-                        }
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .blur(45.dp),
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(
+                                    if (useDarkTheme) Color.Black.copy(alpha = 0.45f)
+                                    else Color.White.copy(alpha = 0.50f)
+                                ),
+                        )
+                    } else {
+                        val colors = if (gradientColors.isNotEmpty()) gradientColors
+                        else listOf(
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.7f),
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Brush.horizontalGradient(colors))
+                                .background(
+                                    if (useDarkTheme) Color.Black.copy(alpha = 0.35f)
+                                    else Color.White.copy(alpha = 0.45f)
+                                ),
+                        )
                     }
                 }
-                MiniPlayerBackgroundStyle.GRADIENT -> {
-                    val colors = if (gradientColors.isNotEmpty()) gradientColors
-                    else listOf(
-                        MaterialTheme.colorScheme.surfaceContainer,
-                        MaterialTheme.colorScheme.surfaceContainer,
-                    )
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.horizontalGradient(colors)
+                // Curvature refraction layer
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = if (useDarkTheme) listOf(
+                                    Color.White.copy(alpha = 0.18f),
+                                    Color.White.copy(alpha = 0.05f),
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.15f),
+                                ) else listOf(
+                                    Color.White.copy(alpha = 0.55f),
+                                    Color.White.copy(alpha = 0.20f),
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.12f),
+                                ),
                             )
-                            .background(Color.Black.copy(alpha = 0.15f)),
-                    )
+                        ),
+                )
+                // Top glass glare shine
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(28.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    if (useDarkTheme) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.38f),
+                                    Color.Transparent,
+                                ),
+                            )
+                        ),
+                )
+            } else {
+                when (miniPlayerBackground) {
+                    MiniPlayerBackgroundStyle.BLUR -> {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                            mediaMetadata?.thumbnailUrl?.let { url ->
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .blur(60.dp),
+                                )
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.45f)),
+                                )
+                            }
+                        }
+                    }
+                    MiniPlayerBackgroundStyle.GRADIENT -> {
+                        val colors = if (gradientColors.isNotEmpty()) gradientColors
+                        else listOf(
+                            MaterialTheme.colorScheme.surfaceContainer,
+                            MaterialTheme.colorScheme.surfaceContainer,
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.horizontalGradient(colors)
+                                )
+                                .background(Color.Black.copy(alpha = 0.15f)),
+                        )
+                    }
+                    else -> {}
                 }
-                else -> {}
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -447,7 +556,12 @@ private fun NewMiniPlayer(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(
+                                1.dp,
+                                if (isLiquidGlass) Color.White.copy(alpha = 0.30f) else Color.Transparent,
+                                RoundedCornerShape(12.dp),
+                            )
                     )
                 }
 
@@ -494,7 +608,21 @@ private fun NewMiniPlayer(
                             playerConnection.togglePlayPause()
                         }
                     },
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            color = if (isLiquidGlass) {
+                                if (useDarkTheme) Color.White.copy(alpha = 0.12f) else Color.Black.copy(alpha = 0.06f)
+                            } else Color.Transparent,
+                            shape = CircleShape,
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isLiquidGlass) {
+                                if (useDarkTheme) Color.White.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.65f)
+                            } else Color.Transparent,
+                            shape = CircleShape,
+                        )
                 ) {
                     Icon(
                         painter = painterResource(
@@ -513,6 +641,31 @@ private fun NewMiniPlayer(
                         modifier = Modifier.size(24.dp)
                     )
                 }
+            }
+
+            if (isLiquidGlass) {
+                // Sleek liquid progress indicator along the bottom of the capsule
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.5.dp)
+                        .align(Alignment.BottomCenter)
+                        .drawWithContent {
+                            val progress = progressState.progress
+                            if (progress > 0f) {
+                                drawRect(
+                                    brush = Brush.horizontalGradient(
+                                        listOf(
+                                            primaryColor.copy(alpha = 0.6f),
+                                            primaryColor,
+                                            primaryColor.copy(alpha = 0.95f),
+                                        )
+                                    ),
+                                    size = Size(size.width * progress, size.height),
+                                )
+                            }
+                        },
+                )
             }
         }
     }

@@ -1200,4 +1200,21 @@
         <item quantity="other">%d files</item>
     </plurals>
     <string name="discord_information_warning">Meld uses Discord\'s public OAuth2 and Gateway APIs to share what you\'re listening to. Authorization happens through a local browser session that closes itself after capturing the code — nothing is sent to third-party servers. Your token is stored on this device in encrypted preferences and is never shared. Meld connects directly to wss://gateway.discord.gg to publish your activity, and only requests the minimum scope required (sdk.social_layer_presence).</string>
+    <string name="playlist_downloaded_auto_active">Downloaded • Auto-download active</string>
+    <string name="playlist_downloading">Downloading…</string>
+    <string name="remove_download_confirm">Do you want to remove this download?</string>
+    <string name="liquid_glass">Liquid Glass</string>
+    <string name="liquid_glass_black">Liquid Glass Black</string>
+    <string name="cd_liquid_glass_black_mode">Liquid Glass Black mode</string>
+    <string name="palette_liquid_glass_black">Liquid Glass Black</string>
+    <string name="sync_with_iphone">Wi-Fi Music Sync (iPhone / Web)</string>
+    <string name="sync_server_desc">Share downloaded songs over local Wi-Fi without cables</string>
+    <string name="sync_server_running_at">Server running at: %s</string>
+    <string name="sync_server_start">Start server</string>
+    <string name="sync_server_stop">Stop server</string>
+    <string name="sync_server_instructions">1. Connect your iPhone 15 to the same Wi-Fi (or hotspot).\n2. Open Safari and enter the link above.\n3. Tap Download All (.ZIP) to save songs offline in your Files app without cables.</string>
+    <string name="sync_server_copied">Link copied to clipboard</string>
+    <string name="sync_server_no_wifi">No Wi-Fi connection detected. Please connect to Wi-Fi or turn on Portable Hotspot.</string>
+    <string name="tv_mode">Modo TV</string>
+    <string name="tv_mode_desc">Optimiza la interfaz para pantallas de TV y navegación con control remoto</string>
 </resources>

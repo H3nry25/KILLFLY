@@ -43,8 +43,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,7 +89,7 @@ constructor(
             .build()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val downloadPreparations = Semaphore(3)
+    private val downloadPreparations = Semaphore(1)
 
     val downloads = MutableStateFlow<Map<String, Download>>(emptyMap())
 
@@ -104,14 +104,10 @@ constructor(
                 ),
         ) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
-            val length = if (dataSpec.length >= 0) dataSpec.length else 1
-
-            if (playerCache.isCached(mediaId, dataSpec.position, length)) {
-                return@Factory dataSpec
-            }
-
             songUrlCache[mediaId]?.let { cachedStream ->
-                return@Factory dataSpec.withResolvedStream(cachedStream)
+                return@Factory dataSpec
+                    .withUri(cachedStream.url.toUri())
+                    .withRequestHeaders(dataSpec.httpRequestHeaders + cachedStream.requestHeaders)
             }
             val cacheGeneration = songUrlCache.generation(mediaId)
 
@@ -125,7 +121,6 @@ constructor(
                         isExplicit = song?.explicit,
                         isUploaded = song?.isUploaded,
                     ),
-                    allowBoundedRange = false,
                 )
             }.getOrThrow()
             val format = playbackData.format
@@ -211,16 +206,9 @@ constructor(
                 useRangeChunks = playbackData.useRangeChunks,
                 expectedGeneration = cacheGeneration,
             )
-            dataSpec.withResolvedStream(
-                CachedStreamUrl(
-                    url = streamUrl,
-                    requestHeaders = playbackData.streamHeaders,
-                    clientName = playbackData.streamClient,
-                    requireBoundedRange = playbackData.requireBoundedRange,
-                    rangeChunkSizeBytes = playbackData.rangeChunkSizeBytes,
-                    useRangeChunks = playbackData.useRangeChunks,
-                ),
-            )
+            dataSpec
+                .withUri(streamUrl.toUri())
+                .withRequestHeaders(dataSpec.httpRequestHeaders + playbackData.streamHeaders)
         }
 
     val downloadNotificationHelper =
@@ -233,9 +221,10 @@ constructor(
             databaseProvider,
             downloadCache,
             dataSourceFactory,
-            Executor(Runnable::run)
+            Dispatchers.IO.asExecutor()
         ).apply {
-            maxParallelDownloads = 3
+            maxParallelDownloads = 1
+            resumeDownloads()
             addListener(
                 object : DownloadManager.Listener {
                     override fun onDownloadChanged(
@@ -243,7 +232,8 @@ constructor(
                         download: Download,
                         finalException: Exception?,
                     ) {
-                        if (download.state == Download.STATE_FAILED && finalException.isExpiredStreamError()) {
+                        if (download.state == Download.STATE_FAILED) {
+                            Timber.tag(TAG).e(finalException, "Download failed for ${download.request.id}")
                             songUrlCache.invalidate(download.request.id)
                         }
 
@@ -349,6 +339,8 @@ constructor(
                 if (!shouldPrepareDownload(downloadManager.downloadIndex.getDownload(mediaMetadata.id)?.state)) {
                     return@withPermit
                 }
+
+                songUrlCache.invalidate(mediaMetadata.id)
 
                 val request =
                     DownloadRequest

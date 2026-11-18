@@ -72,6 +72,7 @@ import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.LocalSyncUtils
 import com.metrolist.music.R
+import com.metrolist.music.constants.AutoDownloadOnLikeKey
 import com.metrolist.music.constants.EnableQobuzKey
 import com.metrolist.music.constants.ListItemHeight
 import com.metrolist.music.constants.ListThumbnailSize
@@ -85,6 +86,7 @@ import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.ExoDownloadService
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.ui.component.ActionPromptDialog
 import com.metrolist.music.ui.component.DefaultDialog
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
@@ -142,6 +144,7 @@ fun SongMenu(
     )
 
     val isPinned by database.speedDialDao.isPinned(song.id).collectAsStateWithLifecycle(initialValue = false)
+    val (autoDownloadOnLike) = rememberPreference(AutoDownloadOnLikeKey, false)
 
     // Podcast subscription state for episodes
     val podcastEntity by produceState<PodcastEntity?>(initialValue = null, song) {
@@ -157,6 +160,7 @@ fun SongMenu(
     }
 
     var showYouTubeMatchDialog by rememberSaveable { mutableStateOf(false) }
+    var showRemoveDownloadDialog by rememberSaveable { mutableStateOf(false) }
 
     val qobuzEnabled by rememberPreference(EnableQobuzKey, defaultValue = false)
 
@@ -190,6 +194,30 @@ fun SongMenu(
             TextFieldValue(
                 song.orderedArtists.joinToString(", ") { it.name },
             ),
+        )
+    }
+
+    if (showRemoveDownloadDialog) {
+        ActionPromptDialog(
+            title = stringResource(R.string.remove_download),
+            onDismiss = { showRemoveDownloadDialog = false },
+            onConfirm = {
+                DownloadService.sendRemoveDownload(
+                    context,
+                    ExoDownloadService::class.java,
+                    song.id,
+                    false,
+                )
+                showRemoveDownloadDialog = false
+            },
+            onCancel = { showRemoveDownloadDialog = false },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_download_confirm),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            },
         )
     }
 
@@ -530,6 +558,9 @@ fun SongMenu(
                             update(s)
                         }
                         syncUtils.likeSong(s)
+                        if (autoDownloadOnLike && s.liked) {
+                            downloadUtil.download(s.id)
+                        }
                     }
                 },
             ) {
@@ -987,12 +1018,7 @@ fun SongMenu(
                                         )
                                     },
                                     onClick = {
-                                        DownloadService.sendRemoveDownload(
-                                            context,
-                                            ExoDownloadService::class.java,
-                                            song.id,
-                                            false,
-                                        )
+                                        showRemoveDownloadDialog = true
                                     },
                                 )
                             }
@@ -1007,12 +1033,7 @@ fun SongMenu(
                                         )
                                     },
                                     onClick = {
-                                        DownloadService.sendRemoveDownload(
-                                            context,
-                                            ExoDownloadService::class.java,
-                                            song.id,
-                                            false,
-                                        )
+                                        showRemoveDownloadDialog = true
                                     },
                                 )
                             }
