@@ -1,0 +1,21 @@
+{
+  "name": "Metrolist Web",
+  "short_name": "Metrolist",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0d0e",
+  "theme_color": "#121316",
+  "description": "Reproductor de música Metrolist para iPhone y Web con sincronización en Google Drive",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/H3nry25/APPSPO/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/H3nry25/APPSPO/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

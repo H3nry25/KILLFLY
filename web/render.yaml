@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: metrolist-web
+    env: node
+    plan: free
+    rootDir: web
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 18.18.0
+      - key: DRIVE_WEBHOOK_URL
+        value: https://script.google.com/macros/s/AKfycbzHmTqyBNsSoTXqfm3dDpowNzsS3a0mhf02fcDFoUh6GN8839_W-xo9CfIeOhyc3tXf/exec
