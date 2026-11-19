@@ -252,7 +252,8 @@ app.post('/api/playlists/:id/songs', (req, res) => {
 // AUDIO STREAMING (via ytdl-core)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { getInfo } from '@distube/ytdl-core';
+import pkg from '@distube/ytdl-core';
+const { getInfo } = pkg;
 
 // Stream audio URL (direct YouTube audio stream)
 app.get('/api/stream/:videoId', async (req, res) => {
