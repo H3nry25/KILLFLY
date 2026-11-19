@@ -218,9 +218,14 @@ app.post('/api/playlists/:id/songs', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Innertube, UniversalCache } from 'youtubei.js';
-import { Ytdl, chooseFormat } from '@distube/ytdl-core';
+import ytdlCore from '@distube/ytdl-core';
 
-const ytdl = new Ytdl();
+// Handle ESM/CommonJS interop for ytdl-core
+const Ytdl = ytdlCore?.Ytdl || ytdlCore?.default?.Ytdl;
+const chooseFormat = ytdlCore?.chooseFormat || ytdlCore?.default?.chooseFormat;
+const getInfo = ytdlCore?.getInfo || ytdlCore?.default?.getInfo;
+
+const ytdl = Ytdl ? new Ytdl() : null;
 let ytClient = null;
 
 async function getYtClient() {
@@ -240,7 +245,7 @@ app.get('/api/stream/:videoId', async (req, res) => {
   if (!videoId) return res.status(400).json({ error: 'videoId requerido' });
 
   try {
-    const info = await ytdl.getInfo(videoId);
+    const info = await getInfo(videoId);
     const format = chooseFormat(info.formats, {
       filter: { hasAudio: true, hasVideo: false }
     });
@@ -308,7 +313,7 @@ const DEFAULT_DRIVE_WEBHOOK = process.env.DRIVE_WEBHOOK_URL ||
 
 async function queueDriveSync(songId, title, artist) {
   try {
-    const info = await ytdl.getInfo(songId);
+    const info = await getInfo(songId);
     const format = chooseFormat(info.formats, {
       filter: { hasAudio: true, hasVideo: false }
     });
