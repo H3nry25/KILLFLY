@@ -14,7 +14,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Innertube, UniversalCache } from 'youtubei.js';
-import { Ytdl, chooseFormat } from '@distube/ytdl-core';
+import ytdlCore from '@distube/ytdl-core';
+const { Ytdl, chooseFormat } = ytdlCore;
 
 dotenv.config();
 
