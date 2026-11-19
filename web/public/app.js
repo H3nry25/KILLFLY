@@ -1,5 +1,22 @@
 // KILLFLY Web Player Engine (Spotify Clone)
 
+const trackCache = new Map();
+
+window.playTrackById = function(id) {
+  const song = trackCache.get(id);
+  if (song) playSingleTrack(song);
+};
+
+window.playSongInListById = function(id) {
+  const song = trackCache.get(id);
+  if (song) playSongInList(song);
+};
+
+window.toggleLikeById = function(id) {
+  const song = trackCache.get(id);
+  if (song) toggleLikeSong(song);
+};
+
 let state = {
   currentSong: null,
   queue: [],
@@ -112,11 +129,13 @@ function renderCardRow(containerId, items) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
+  items.forEach(song => trackCache.set(song.id, song));
+
   container.innerHTML = items.map(song => `
-    <div onclick='playSingleTrack(${JSON.stringify(song)})' class="bg-[#181818] hover:bg-[#282828] p-3.5 rounded-lg cursor-pointer transition group relative flex flex-col shadow-md">
+    <div onclick="playTrackById('${song.id}')" class="bg-[#181818] hover:bg-[#282828] p-3.5 rounded-lg cursor-pointer transition group relative flex flex-col shadow-md">
       <div class="relative w-full aspect-square mb-3.5 rounded overflow-hidden shadow-lg bg-[#282828]">
         <img src="${song.thumbnail}" class="w-full h-full object-cover">
-        <button onclick='event.stopPropagation(); playSingleTrack(${JSON.stringify(song)})' class="w-11 h-11 rounded-full bg-[#1ed760] text-black flex items-center justify-center absolute right-2 bottom-2 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition shadow-xl play-btn-glow">
+        <button onclick="event.stopPropagation(); playTrackById('${song.id}')" class="w-11 h-11 rounded-full bg-[#1ed760] text-black flex items-center justify-center absolute right-2 bottom-2 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition shadow-xl play-btn-glow">
           <svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         </button>
       </div>
@@ -183,19 +202,22 @@ async function executeSearch(query) {
     // Render Top Result Card
     const topCard = document.getElementById('topResultCard');
     if (topResult) {
+      trackCache.set(topResult.id, topResult);
       topCard.innerHTML = `
-        <div onclick='playSingleTrack(${JSON.stringify(topResult)})'>
+        <div onclick="playTrackById('${topResult.id}')">
           <img src="${topResult.thumbnail}" class="w-24 h-24 rounded-lg object-cover shadow-2xl mb-4">
           <h2 class="text-3xl font-black text-white truncate mb-1">${escapeHtml(topResult.title)}</h2>
           <p class="text-xs text-[#b3b3b3]">
             <span class="text-white font-bold">${escapeHtml(topResult.artist)}</span> • Canción
           </p>
         </div>
-        <button onclick='event.stopPropagation(); playSingleTrack(${JSON.stringify(topResult)})' class="w-12 h-12 rounded-full bg-[#1ed760] text-black flex items-center justify-center absolute right-6 bottom-6 opacity-0 group-hover:opacity-100 transition shadow-2xl play-btn-glow">
+        <button onclick="event.stopPropagation(); playTrackById('${topResult.id}')" class="w-12 h-12 rounded-full bg-[#1ed760] text-black flex items-center justify-center absolute right-6 bottom-6 opacity-0 group-hover:opacity-100 transition shadow-2xl play-btn-glow">
           <svg class="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         </button>
       `;
     }
+
+    songs.forEach(song => trackCache.set(song.id, song));
 
     // Render Top 4 Tracks List
     const topList = document.getElementById('topSongsList');
@@ -249,12 +271,13 @@ function openPlaylistView(plId) {
 }
 
 function renderTrackRow(song, isTable = false, trackNumber = 1) {
+  trackCache.set(song.id, song);
   const isLiked = state.likedSongs.some(s => s.id === song.id);
   const isCurrent = state.currentSong?.id === song.id;
 
   if (isTable) {
     return `
-      <tr onclick='playSongInList(${JSON.stringify(song)})' class="hover:bg-[#282828]/60 group cursor-pointer transition rounded-md">
+      <tr onclick="playSongInListById('${song.id}')" class="hover:bg-[#282828]/60 group cursor-pointer transition rounded-md">
         <td class="py-2.5 text-center text-sm ${isCurrent ? 'text-[#1ed760] font-bold' : 'text-[#b3b3b3]'}">
           <span class="group-hover:hidden">${trackNumber}</span>
           <span class="hidden group-hover:inline text-white">▶</span>
@@ -271,7 +294,7 @@ function renderTrackRow(song, isTable = false, trackNumber = 1) {
         <td class="py-2.5 text-xs text-[#b3b3b3] truncate hidden md:table-cell">${escapeHtml(song.album || 'Sencillo')}</td>
         <td class="py-2.5 text-xs text-[#b3b3b3] text-right pr-4">${song.duration || '3:30'}</td>
         <td class="py-2.5 text-center">
-          <button onclick='event.stopPropagation(); toggleLikeSong(${JSON.stringify(song)})' class="text-[#b3b3b3] hover:text-white transition active:scale-90 p-1">
+          <button onclick="event.stopPropagation(); toggleLikeById('${song.id}')" class="text-[#b3b3b3] hover:text-white transition active:scale-90 p-1">
             <svg class="w-5 h-5 ${isLiked ? 'text-[#1ed760] fill-current' : 'fill-none stroke-current'}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
           </button>
         </td>
@@ -279,7 +302,7 @@ function renderTrackRow(song, isTable = false, trackNumber = 1) {
     `;
   } else {
     return `
-      <div onclick='playSingleTrack(${JSON.stringify(song)})' class="flex items-center justify-between p-2 rounded-md hover:bg-[#282828] cursor-pointer group transition">
+      <div onclick="playTrackById('${song.id}')" class="flex items-center justify-between p-2 rounded-md hover:bg-[#282828] cursor-pointer group transition">
         <div class="flex items-center gap-3 overflow-hidden">
           <img src="${song.thumbnail}" class="w-10 h-10 rounded object-cover flex-shrink-0">
           <div class="overflow-hidden">
@@ -288,7 +311,7 @@ function renderTrackRow(song, isTable = false, trackNumber = 1) {
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <button onclick='event.stopPropagation(); toggleLikeSong(${JSON.stringify(song)})' class="text-[#b3b3b3] hover:text-white transition active:scale-90 p-1">
+          <button onclick="event.stopPropagation(); toggleLikeById('${song.id}')" class="text-[#b3b3b3] hover:text-white transition active:scale-90 p-1">
             <svg class="w-4 h-4 ${isLiked ? 'text-[#1ed760] fill-current' : 'fill-none stroke-current'}" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
           </button>
           <span class="text-xs text-[#b3b3b3]">${song.duration}</span>

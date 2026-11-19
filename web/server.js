@@ -166,26 +166,45 @@ app.get(['/api/stream/:id', '/api/stream/:videoId'], async (req, res) => {
       return res.status(404).json({ error: 'No se pudo descifrar URL' });
     }
 
+    const totalLength = format.content_length ? parseInt(format.content_length, 10) : 0;
     const rangeHeader = req.headers.range;
+
+    // Google Video CDN requiere rangos acotados (máximo 1 MB por petición)
+    const CHUNK_SIZE = 1024 * 1024; // 1 MB chunk
+
+    let start = 0;
+    let end = (totalLength > 0) ? Math.min(start + CHUNK_SIZE - 1, totalLength - 1) : CHUNK_SIZE - 1;
+
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      start = parseInt(parts[0], 10);
+      if (parts[1] && parseInt(parts[1], 10)) {
+        end = Math.min(parseInt(parts[1], 10), start + CHUNK_SIZE - 1);
+      } else if (totalLength > 0) {
+        end = Math.min(start + CHUNK_SIZE - 1, totalLength - 1);
+      } else {
+        end = start + CHUNK_SIZE - 1;
+      }
+    }
+
     const fetchHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Range': `bytes=${start}-${end}`,
     };
-    if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
 
     const streamResponse = await fetch(streamUrl, { headers: fetchHeaders });
 
-    res.status(streamResponse.status);
-    streamResponse.headers.forEach((val, key) => {
-      const lower = key.toLowerCase();
-      if (['content-range', 'content-length', 'content-type', 'accept-ranges'].includes(lower)) {
-        res.setHeader(key, val);
-      }
-    });
-
-    if (!res.getHeader('Content-Type')) {
-      res.setHeader('Content-Type', format.mime_type || 'audio/mp4');
+    if (!streamResponse.ok && streamResponse.status !== 206) {
+      console.error(`Google Video CDN retornó estado ${streamResponse.status}`);
+      return res.status(streamResponse.status).end();
     }
+
+    const contentLength = end - start + 1;
+    res.status(206);
+    res.setHeader('Content-Type', format.mime_type || 'audio/mp4');
+    res.setHeader('Content-Range', `bytes ${start}-${end}/${totalLength || '*'}`);
+    res.setHeader('Content-Length', contentLength);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
 
     const reader = streamResponse.body.getReader();
     async function pump() {
