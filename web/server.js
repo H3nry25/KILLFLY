@@ -157,10 +157,31 @@ app.get('/api/search', async (req, res) => {
 });
 
 // Get user's library (liked songs)
-app.get('/api/library', (req, res) => {
+// Try to load from Google Drive webhook first, fallback to local storage
+app.get('/api/library', async (req, res) => {
   const userId = req.query.userId || 'anonymous';
-  const userLib = library.users[userId] || { liked: [], playlists: [] };
-  res.json(userLib);
+
+  try {
+    // Try to fetch from Google Drive webhook
+    const driveResponse = await fetch(DEFAULT_DRIVE_WEBHOOK);
+    if (driveResponse.ok) {
+      const driveData = await driveResponse.json();
+      res.json({
+        liked: driveData.liked || [],
+        playlists: driveData.playlists || [],
+        source: 'google-drive',
+      });
+    } else {
+      // Fallback to local storage
+      const userLib = library.users[userId] || { liked: [], playlists: [] };
+      res.json({ ...userLib, source: 'local' });
+    }
+  } catch (e) {
+    console.error('[API] Error loading library from Drive:', e.message);
+    // Fallback to local storage
+    const userLib = library.users[userId] || { liked: [], playlists: [] };
+    res.json({ ...userLib, source: 'local' });
+  }
 });
 
 // Like a song
@@ -312,19 +333,11 @@ app.get('/api/stream/:videoId', async (req, res) => {
   }
 });
 
-// Get track lyrics
+// Get track lyrics (placeholder - not implemented yet)
 app.get('/api/lyrics/:videoId', async (req, res) => {
-  const videoId = req.params.videoId;
-
-  try {
-    const client = await getYtClient();
-    const lyrics = await client.music.getLyrics(videoId);
-    res.json({
-      description: lyrics?.description?.text || lyrics?.text || 'Letras no disponibles.',
-    });
-  } catch (e) {
-    res.json({ description: 'Letras no disponibles.' });
-  }
+  res.json({
+    description: 'Letras no disponibles.',
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
