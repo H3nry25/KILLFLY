@@ -15,7 +15,8 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Innertube, UniversalCache } from 'youtubei.js';
 import ytdlCore from '@distube/ytdl-core';
-const { Ytdl, chooseFormat } = ytdlCore;
+const chooseFormat = ytdlCore?.chooseFormat || ytdlCore.default?.chooseFormat;
+const getInfo = ytdlCore?.getInfo || ytdlCore.default?.getInfo;
 
 dotenv.config();
 
@@ -77,7 +78,6 @@ let library = loadLibrary();
 // ─────────────────────────────────────────────────────────────────────────────
 
 let ytClient = null;
-const ytdl = new Ytdl();
 
 async function getYtClient() {
   if (!ytClient) {
@@ -241,7 +241,7 @@ app.get('/api/stream/:videoId', async (req, res) => {
   if (!videoId) return res.status(400).json({ error: 'videoId requerido' });
 
   try {
-    const info = await ytdl.getInfo(videoId);
+    const info = await getInfo(videoId);
     const format = chooseFormat(info.formats, {
       filter: { hasAudio: true, hasVideo: false }
     });
@@ -309,7 +309,7 @@ const DEFAULT_DRIVE_WEBHOOK = process.env.DRIVE_WEBHOOK_URL ||
 
 async function queueDriveSync(songId, title, artist) {
   try {
-    const info = await ytdl.getInfo(songId);
+    const info = await getInfo(songId);
     const format = chooseFormat(info.formats, {
       filter: { hasAudio: true, hasVideo: false }
     });
