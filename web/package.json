@@ -1,20 +1,33 @@
 {
   "name": "metrolist-web",
   "version": "1.0.0",
-  "description": "Metrolist Web Player for iPhone, PC and Android with Google Drive & YouTube Music Sync",
+  "description": "Metrolist - YouTube Music client reimagined for the web with Spotify integration",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "build": "echo 'No build step - pure Node.js server'",
+    "test": "node test/server.test.js"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "youtubei.js": "^10.0.0"
+    "youtubei.js": "^10.5.0"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "keywords": [
+    "spotify",
+    "music",
+    "player",
+    "youtube-music",
+    "pwa",
+    "metrolist"
+  ],
+  "author": "Metrolist Contributors",
+  "license": "GPL-3.0"
 }

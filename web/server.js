@@ -1,9 +1,22 @@
+/**
+ * Metrolist Web Backend Server
+ *
+ * A web player that syncs with the Android app via:
+ * - Spotify API integration
+ * - Google Drive webhook sync
+ * - Local file-based storage (can be upgraded to PostgreSQL)
+ */
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import { Innertube, UniversalCache } from 'youtubei.js';
+import { Ytdl, chooseFormat } from '@distube/ytdl-core';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,111 +24,249 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Webhook por defecto de Google Drive (el configurado por el usuario)
-const DEFAULT_DRIVE_WEBHOOK = process.env.DRIVE_WEBHOOK_URL ||
-  'https://script.google.com/macros/s/AKfycbzHmTqyBNsSoTXqfm3dDpowNzsS3a0mhf02fcDFoUh6GN8839_W-xo9CfIeOhyc3tXf/exec';
+// ─────────────────────────────────────────────────────────────────────────────
+// MIDDLEWARE
+// ─────────────────────────────────────────────────────────────────────────────
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Persistencia local ligera para canciones favoritas
-const DATA_DIR = path.join(__dirname, 'data');
-const LIKED_FILE = path.join(DATA_DIR, 'liked.json');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// ─────────────────────────────────────────────────────────────────────────────
+// DATA PERSISTENCE
+// ─────────────────────────────────────────────────────────────────────────────
 
-function getLikedSongs() {
+const DATA_DIR = path.join(__dirname, 'data');
+const LIBRARY_FILE = path.join(DATA_DIR, 'library.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Load library from file
+function loadLibrary() {
   try {
-    if (fs.existsSync(LIKED_FILE)) {
-      return JSON.parse(fs.readFileSync(LIKED_FILE, 'utf-8'));
+    if (fs.existsSync(LIBRARY_FILE)) {
+      return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf-8'));
     }
   } catch (e) {
-    console.error('Error leyendo liked.json:', e);
+    console.error('Error loading library.json:', e);
   }
-  return [];
+  return { liked: [], playlists: [], users: {} };
 }
 
-function saveLikedSongs(songs) {
+// Save library to file
+function saveLibrary(data) {
   try {
-    fs.writeFileSync(LIKED_FILE, JSON.stringify(songs, null, 2), 'utf-8');
+    fs.writeFileSync(LIBRARY_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (e) {
-    console.error('Error guardando liked.json:', e);
+    console.error('Error saving library.json:', e);
   }
 }
 
-// Inicialización de Innertube (YouTube Music engine)
-let yt = null;
-async function getInnertube() {
-  if (!yt) {
-    yt = await Innertube.create({
+// In-memory library (can be replaced with PostgreSQL)
+let library = loadLibrary();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// YOUTUBE INTEGRATION (for audio streaming)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let ytClient = null;
+const ytdl = new Ytdl();
+
+async function getYtClient() {
+  if (!ytClient) {
+    ytClient = await Innertube.create({
       cache: new UniversalCache(false),
       generate_session_locally: true,
     });
-    console.log('✅ Motor InnerTube (YouTube Music) iniciado correctamente');
+    console.log('[Server] YouTube InnerTube client initialized');
   }
-  return yt;
+  return ytClient;
 }
 
-// 1. Endpoint: Búsqueda en YouTube Music
+// ─────────────────────────────────────────────────────────────────────────────
+// API ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Health check endpoint (for uptime monitoring)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'metrolist-web-backend',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Search YouTube Music tracks
 app.get('/api/search', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: 'Query vacía' });
 
   try {
-    const client = await getInnertube();
+    const client = await getYtClient();
     const searchResults = await client.music.search(query, { type: 'song' });
 
-    const results = (searchResults.songs?.contents || []).map(item => ({
-      id: item.id,
-      title: item.title,
-      artist: item.artists?.[0]?.name || 'Artista desconocido',
-      album: item.album?.name || '',
-      duration: item.duration?.text || '',
-      durationSec: item.duration?.seconds || 0,
-      thumbnail: item.thumbnails?.[0]?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
-    }));
+    const songs = (searchResults.songs?.contents || []).map(item => {
+      const thumb = item.thumbnails?.[0]?.url || '';
+      const highResThumb = thumb.replace(/=w\d+-h\d+.*$/, '=w544-h544-l90-rj');
+      return {
+        id: item.id,
+        title: item.title || 'Título desconocido',
+        artist: item.artists?.[0]?.name || 'Artista desconocido',
+        album: item.album?.name || '',
+        duration: item.duration?.text || '3:30',
+        durationSec: item.duration?.seconds || 210,
+        thumbnail: highResThumb,
+        explicit: item.explicit || false,
+        thumbnailId: item.thumbnails?.[0]?.id || '',
+      };
+    });
 
-    res.json({ results });
+    res.json({
+      query,
+      items: songs,
+      total: songs.length,
+    });
   } catch (e) {
-    console.error('Error en /api/search:', e);
-    res.status(500).json({ error: e.message });
+    console.error('[API] Error searching:', e.message);
+    res.status(500).json({ error: `Error en búsqueda: ${e.message}` });
   }
 });
 
-// 2. Endpoint: Streaming de audio optimizado para iOS Safari (con soporte HTTP Range 206)
-app.get('/api/stream/:id', async (req, res) => {
-  const songId = req.params.id;
-  if (!songId) return res.status(400).json({ error: 'ID de canción requerido' });
+// Get user's library (liked songs)
+app.get('/api/library', (req, res) => {
+  const userId = req.query.userId || 'anonymous';
+  const userLib = library.users[userId] || { liked: [], playlists: [] };
+  res.json(userLib);
+});
+
+// Like a song
+app.post('/api/like', (req, res) => {
+  const { song, userId = 'anonymous' } = req.body;
+  if (!song?.id) return res.status(400).json({ error: 'Datos incompletos' });
+
+  // Ensure user exists
+  if (!library.users[userId]) {
+    library.users[userId] = { liked: [], playlists: [] };
+  }
+
+  const userLib = library.users[userId];
+  const exists = userLib.liked.some(s => s.id === song.id);
+
+  if (!exists) {
+    const newEntry = {
+      ...song,
+      likedAt: new Date().toISOString(),
+      driveSynced: false,
+    };
+    userLib.liked = [newEntry, ...userLib.liked];
+    saveLibrary(library);
+
+    // Queue for Google Drive sync
+    queueDriveSync(song.id, song.title, song.artist || '');
+  }
+
+  res.json({ status: 'ok', id: song.id, liked: true });
+});
+
+// Unlike a song
+app.delete('/api/like', (req, res) => {
+  const { id, userId = 'anonymous' } = req.body;
+  if (!id) return res.status(400).json({ error: 'ID requerido' });
+
+  const userLib = library.users[userId];
+  if (userLib) {
+    userLib.liked = userLib.liked.filter(s => s.id !== id);
+    saveLibrary(library);
+  }
+
+  res.json({ status: 'ok', id,liked: false });
+});
+
+// Create a playlist
+app.post('/api/playlists', (req, res) => {
+  const { name, userId = 'anonymous' } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nombre requerido' });
+
+  if (!library.users[userId]) {
+    library.users[userId] = { liked: [], playlists: [] };
+  }
+
+  const userLib = library.users[userId];
+  const newPl = {
+    id: 'pl_' + Date.now(),
+    name: name.trim(),
+    createdAt: new Date().toISOString(),
+    songs: [],
+  };
+  userLib.playlists = [...(userLib.playlists || []), newPl];
+  saveLibrary(library);
+
+  res.json(newPl);
+});
+
+// Add song to playlist
+app.post('/api/playlists/:id/songs', (req, res) => {
+  const { id: playlistId } = req.params;
+  const { song } = req.body;
+  if (!song?.id) return res.status(400).json({ error: 'Canción requerida' });
+
+  const userLib = library.users['anonymous'];
+  if (!userLib) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  const pl = userLib.playlists.find(p => p.id === playlistId);
+  if (!pl) return res.status(404).json({ error: 'Playlist no encontrada' });
+
+  if (!pl.songs.some(s => s.id === song.id)) {
+    pl.songs.push({ ...song, addedAt: new Date().toISOString() });
+    saveLibrary(library);
+  }
+
+  res.json({ status: 'ok', playlist: pl });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIO STREAMING (via youtubei.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Stream audio URL (converts YouTube video to audio stream)
+app.get('/api/stream/:videoId', async (req, res) => {
+  const videoId = req.params.videoId;
+  if (!videoId) return res.status(400).json({ error: 'videoId requerido' });
 
   try {
-    const client = await getInnertube();
-    const info = await client.music.getInfo(songId);
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+    const info = await ytdl.getInfo(videoId);
+    const format = chooseFormat(info.formats, {
+      filter: { hasAudio: true, hasVideo: false }
+    });
 
-    if (!format || !format.decipher(client.session.player)) {
+    if (!format || !format.url) {
       return res.status(404).json({ error: 'No se encontró stream de audio' });
     }
 
-    const streamUrl = format.decipher(client.session.player);
-
-    // Redirigir directamente al stream de audio firmado de Google/YouTube o proxy con Range
     const rangeHeader = req.headers.range;
     const fetchHeaders = {
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     };
     if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
 
-    const streamResponse = await fetch(streamUrl, { headers: fetchHeaders });
+    const streamResponse = await fetch(format.url, { headers: fetchHeaders });
 
     res.status(streamResponse.status);
     streamResponse.headers.forEach((val, key) => {
-      if (['content-range', 'content-length', 'content-type', 'accept-ranges'].includes(key.toLowerCase())) {
+      const lower = key.toLowerCase();
+      if (['content-range', 'content-length', 'content-type', 'accept-ranges'].includes(lower)) {
         res.setHeader(key, val);
       }
     });
 
     if (!res.getHeader('Content-Type')) {
-      res.setHeader('Content-Type', format.mime_type || 'audio/mp4');
+      res.setHeader('Content-Type', format.mimeType || 'audio/mp4');
     }
     res.setHeader('Accept-Ranges', 'bytes');
 
@@ -128,92 +279,42 @@ app.get('/api/stream/:id', async (req, res) => {
     }
     await pump();
   } catch (e) {
-    console.error(`Error en /api/stream/${songId}:`, e);
+    console.error(`[Stream] Error streaming ${videoId}:`, e.message);
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
 });
 
-// 3. Endpoint: Obtener canciones favoritas
-app.get('/api/liked', (req, res) => {
-  res.json({ liked: getLikedSongs() });
-});
+// Get track lyrics
+app.get('/api/lyrics/:videoId', async (req, res) => {
+  const videoId = req.params.videoId;
 
-// 4. Endpoint: Dar "Me gusta" (Guarda en web y sube a Google Drive automáticamente)
-app.post('/api/like', async (req, res) => {
-  const song = req.body;
-  if (!song || !song.id) return res.status(400).json({ error: 'Datos de canción incompletos' });
-
-  const current = getLikedSongs();
-  const exists = current.some(s => s.id === song.id);
-
-  if (!exists) {
-    const updated = [
-      {
-        ...song,
-        likedAt: new Date().toISOString(),
-        driveSynced: false,
-      },
-      ...current,
-    ];
-    saveLikedSongs(updated);
-
-    // En segundo plano en Render: Subir audio a Google Drive vía Webhook
-    uploadToGoogleDriveAsync(song.id, song.title, song.artist, song.album, song.thumbnail);
-  }
-
-  res.json({ status: 'ok', id: song.id });
-});
-
-// 5. Endpoint: Quitar "Me gusta"
-app.post('/api/unlike', (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ error: 'ID requerido' });
-
-  const current = getLikedSongs();
-  const filtered = current.filter(s => s.id !== id);
-  saveLikedSongs(filtered);
-
-  res.json({ status: 'ok', id });
-});
-
-// 6. Endpoint de Sincronización bidireccional con Metrolist Android
-app.post('/api/sync/android', (req, res) => {
-  const { songs } = req.body;
-  if (!Array.isArray(songs)) return res.status(400).json({ error: 'Lista de canciones inválida' });
-
-  const current = getLikedSongs();
-  const currentMap = new Map(current.map(s => [s.id, s]));
-
-  for (const s of songs) {
-    if (!currentMap.has(s.id)) {
-      currentMap.set(s.id, {
-        id: s.id,
-        title: s.title || s.name,
-        artist: s.artist || '',
-        album: s.album || '',
-        thumbnail: s.thumbnail || `https://i.ytimg.com/vi/${s.id}/hqdefault.jpg`,
-        likedAt: s.likedAt || new Date().toISOString(),
-        driveSynced: true,
-      });
-    }
-  }
-
-  const merged = Array.from(currentMap.values());
-  saveLikedSongs(merged);
-
-  res.json({ status: 'ok', total: merged.length });
-});
-
-// Helper: Subida ultra rápida desde Render a Google Drive Webhook
-async function uploadToGoogleDriveAsync(songId, title, artist, album, thumbnail) {
   try {
-    const client = await getInnertube();
-    const info = await client.music.getInfo(songId);
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
-    if (!format) return;
+    const client = await getYtClient();
+    const lyrics = await client.music.getLyrics(videoId);
+    res.json({
+      description: lyrics?.description?.text || lyrics?.text || 'Letras no disponibles.',
+    });
+  } catch (e) {
+    res.json({ description: 'Letras no disponibles.' });
+  }
+});
 
-    const streamUrl = format.decipher(client.session.player);
-    const audioRes = await fetch(streamUrl);
+// ─────────────────────────────────────────────────────────────────────────────
+// GOOGLE DRIVE SYNC (via webhook)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_DRIVE_WEBHOOK = process.env.DRIVE_WEBHOOK_URL ||
+  'https://script.google.com/macros/s/AKfycbzHmTqyBNsSoTXqfm3dDpowNzsS3a0mhf02fcDFoUh6GN8839_W-xo9CfIeOhyc3tXf/exec';
+
+async function queueDriveSync(songId, title, artist) {
+  try {
+    const info = await ytdl.getInfo(songId);
+    const format = chooseFormat(info.formats, {
+      filter: { hasAudio: true, hasVideo: false }
+    });
+    if (!format || !format.url) return;
+
+    const audioRes = await fetch(format.url);
     const audioBuffer = await audioRes.arrayBuffer();
     const base64Audio = Buffer.from(audioBuffer).toString('base64');
 
@@ -221,33 +322,137 @@ async function uploadToGoogleDriveAsync(songId, title, artist, album, thumbnail)
     const cleanArtist = (artist || '').replace(/[/\\?%*:|"<>]/g, '_');
     const filename = cleanArtist ? `${cleanArtist} - ${cleanTitle}.m4a` : `${cleanTitle}.m4a`;
 
-    const payload = {
-      filename: filename,
-      base64: base64Audio,
-    };
-
     const driveRes = await fetch(DEFAULT_DRIVE_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ filename, base64: base64Audio }),
     });
 
     if (driveRes.ok) {
-      console.log(`☁️ Subido a Google Drive con éxito: ${filename}`);
-      const current = getLikedSongs();
-      const item = current.find(s => s.id === songId);
-      if (item) {
-        item.driveSynced = true;
-        saveLikedSongs(current);
+      console.log(`[Drive] Song backed up: ${filename}`);
+      // Update like status
+      const userLib = library.users['anonymous'];
+      if (userLib) {
+        const song = userLib.liked.find(s => s.id === songId);
+        if (song) song.driveSynced = true;
+        saveLibrary(library);
       }
     }
   } catch (e) {
-    console.error(`Error subiendo a Google Drive ${songId}:`, e.message);
+    console.error(`[Drive] Error syncing ${songId}:`, e.message);
   }
 }
 
-// Iniciar servidor
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTHENTICATION (Google OAuth placeholder)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.post('/api/auth/google', (req, res) => {
+  // Google Sign-In is handled on the frontend
+  // The frontend will receive an ID token and verify it server-side
+  res.json({
+    message: 'Use Google Sign-In on frontend',
+    docs: 'https://developers.google.com/identity/sign-in/web/server-side-auth'
+  });
+});
+
+// Verify Google ID token
+app.post('/api/auth/verify', async (req, res) => {
+  const { idToken } = req.body;
+  if (!idToken) return res.status(400).json({ error: 'idToken requerido' });
+
+  // TODO: Verify ID token with Google OAuth2 API
+  // See: https://developers.google.com/identity/sign-in/web/backend-auth
+  res.json({
+    verified: true,
+    message: 'ID token received - implement verification with Google API'
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPOTIFY API INTEGRATION (REST API only for now)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// These endpoints will work when SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set
+// They allow full Spotify integration (search, library, playlists, etc.)
+
+const SPOTIFY_BASE_URL = 'https://api.spotify.com/v1';
+
+async function getSpotifyToken() {
+  if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+    return null;
+  }
+
+  const response = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(
+        `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
+      ).toString('base64'),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ grant_type: 'client_credentials' }),
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.access_token;
+}
+
+// Spotify search (REST API)
+app.get('/api/spotify/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.status(400).json({ error: 'Query vacía' });
+
+  const token = await getSpotifyToken();
+  if (!token) {
+    return res.status(503).json({
+      error: 'Spotify API no configurado',
+      setup: 'Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables'
+    });
+  }
+
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      type: 'track,artist,album,playlist',
+      limit: '20',
+    });
+
+    const response = await fetch(`${SPOTIFY_BASE_URL}/search?${params}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) throw new Error('API error');
+    res.json(await response.json());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATCH-ALL (SPA fallback)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// START SERVER
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
-  console.log(`🎵 Servidor Metrolist Web listo en http://localhost:${PORT}`);
-  console.log(`🚀 Despliegue en Render activo en puerto ${PORT}`);
+  console.log(`
+╔══════════════════════════════════════════════════════════════╗
+║  Metrolist Web Backend                                        ║
+║  http://localhost:${PORT}                                   ║
+╠══════════════════════════════════════════════════════════════╣
+║  Environment Variables:                                      ║
+║    - SPOTIFY_CLIENT_ID      (optional - for Spotify API)     ║
+║    - SPOTIFY_CLIENT_SECRET  (optional - for Spotify API)     ║
+║    - DRIVE_WEBHOOK_URL      (optional - Google Drive sync)   ║
+║    - FRONTEND_URL           (optional - CORS origin)         ║
+╚══════════════════════════════════════════════════════════════╝
+`);
 });

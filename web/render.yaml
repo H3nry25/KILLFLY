@@ -9,5 +9,15 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 18.18.0
+      - key: SPOTIFY_CLIENT_ID
+        value: ""
+        description: "Spotify Developer Client ID"
+      - key: SPOTIFY_CLIENT_SECRET
+        value: ""
+        description: "Spotify Developer Client Secret"
       - key: DRIVE_WEBHOOK_URL
-        value: https://script.google.com/macros/s/AKfycbzHmTqyBNsSoTXqfm3dDpowNzsS3a0mhf02fcDFoUh6GN8839_W-xo9CfIeOhyc3tXf/exec
+        value: ""
+        description: "Google Apps Script webhook for sync"
+      - key: FRONTEND_URL
+        value: "*"
+        description: "CORS origin for API requests"

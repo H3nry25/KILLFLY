@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Production
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Data (will be persisted separately)
+data/*.json
+!data/.gitkeep
+
+# Cache
+.cache/
+.parcel-cache/node_modules/
