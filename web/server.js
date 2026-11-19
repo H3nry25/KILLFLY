@@ -14,9 +14,19 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Innertube, UniversalCache } from 'youtubei.js';
+// ytdl-core can export differently depending on version
+// Handle both ESM and CommonJS interop for Node 26+
 import ytdlCore from '@distube/ytdl-core';
-const chooseFormat = ytdlCore?.chooseFormat || ytdlCore.default?.chooseFormat;
-const getInfo = ytdlCore?.getInfo || ytdlCore.default?.getInfo;
+
+// Support multiple export patterns
+const ytdl = typeof ytdlCore === 'function'
+  ? new ytdlCore()
+  : (ytdlCore?.default || ytdlCore);
+
+const { chooseFormat } = ytdl || {};
+const getInfo = ytdl?.getInfo || ytdlCore?.getInfo || (async () => {
+  throw new Error('ytdl-core: getInfo not available');
+});
 
 dotenv.config();
 
