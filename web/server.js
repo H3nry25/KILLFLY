@@ -83,6 +83,41 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Home feed endpoint (for welcome screen)
+app.get('/api/home', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    // Get search results for popular tracks
+    const searchRes = await yts('Top hits 2024');
+    const trending = (searchRes?.videos?.slice(0, 10) || []).map(item => ({
+      id: item.videoId,
+      title: item.title,
+      artist: item.author?.name || 'Artista desconocido',
+      album: item.channel?.name || '',
+      duration: item.duration?.toString() || '0:00',
+      durationSec: item.timestamp?.seconds || 0,
+      thumbnail: item.thumbnail || '',
+      explicit: item.officialVideo || false,
+    }));
+
+    res.json({
+      greeting: new Date().getHours() < 12
+        ? '¡Buenos días!'
+        : new Date().getHours() < 18
+        ? '¡Buenas tardes!'
+        : '¡Buenas noches!',
+      trending,
+    });
+  } catch (e) {
+    console.error('[API] Error loading home feed:', e.message);
+    res.json({
+      greeting: '¡Bienvenido a Metrolist!',
+      trending: [],
+    });
+  }
+});
+
 // Search YouTube Music tracks
 app.get('/api/search', async (req, res) => {
   const query = req.query.q;
