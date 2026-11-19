@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Metrolist - YouTube Music client</title>
+  <title>KILLFLY - Web Player</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Metrolist">
+  <meta name="apple-mobile-web-app-title" content="KILLFLY">
   <meta name="theme-color" content="#000000">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231ed760'><path d='M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.793-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.722 1.115.294.18.386.562.207.855zm1.226-2.732c-.227.37-.714.484-1.083.256-2.69-1.653-6.79-2.134-9.972-1.168-.415.127-.86-.107-.986-.522-.127-.414.107-.86.522-.986 3.633-1.103 8.15-.568 11.264 1.338.37.228.484.715.255 1.082zm.106-2.835C14.692 8.95 9.081 8.766 5.82 9.756c-.494.15-1.022-.132-1.172-.626-.15-.494.132-1.022.626-1.172 3.755-1.14 9.957-.922 13.722 1.312.443.263.588.84.325 1.283-.263.443-.84.588-1.283.325z'/></svg>">
@@ -79,7 +79,7 @@
           <svg class="w-8 h-8 text-[#1ed760]" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.793-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.722 1.115.294.18.386.562.207.855zm1.226-2.732c-.227.37-.714.484-1.083.256-2.69-1.653-6.79-2.134-9.972-1.168-.415.127-.86-.107-.986-.522-.127-.414.107-.86.522-.986 3.633-1.103 8.15-.568 11.264 1.338.37.228.484.715.255 1.082zm.106-2.835C14.692 8.95 9.081 8.766 5.82 9.756c-.494.15-1.022-.132-1.172-.626-.15-.494.132-1.022.626-1.172 3.755-1.14 9.957-.922 13.722 1.312.443.263.588.84.325 1.283-.263.443-.84.588-1.283.325z"/>
           </svg>
-          <span class="text-xl font-extrabold tracking-tighter">Metrolist</span>
+          <span class="text-xl font-extrabold tracking-tighter">KILLFLY</span>
         </div>
 
         <nav class="flex flex-col gap-4 font-semibold text-[#b3b3b3]">
@@ -329,7 +329,7 @@
         <section id="pageLyrics" class="hidden min-h-full p-8 flex flex-col items-center justify-center bg-gradient-to-b from-emerald-950/80 via-black to-black">
           <div class="max-w-2xl w-full text-center space-y-6">
             <h2 id="lyricsTrackTitle" class="text-3xl font-extrabold text-white">Letras de la canción</h2>
-            <p id="lyricsTrackArtist" class="text-sm font-semibold text-[#1ed760]">Metrolist</p>
+            <p id="lyricsTrackArtist" class="text-sm font-semibold text-[#1ed760]">KILLFLY Music</p>
             <div id="lyricsContent" class="text-xl lg:text-2xl font-bold leading-relaxed text-white/90 whitespace-pre-line py-8">
               Cargando letras...
             </div>
@@ -353,7 +353,7 @@
           <img id="queueCurrentThumb" src="https://via.placeholder.com/44" class="w-11 h-11 rounded object-cover">
           <div class="overflow-hidden">
             <p id="queueCurrentTitle" class="font-bold text-white text-sm truncate">Sin reproducción</p>
-            <p id="queueCurrentArtist" class="text-xs text-[#b3b3b3] truncate">Metrolist</p>
+            <p id="queueCurrentArtist" class="text-xs text-[#b3b3b3] truncate">KILLFLY</p>
           </div>
         </div>
       </div>
@@ -375,7 +375,7 @@
       <img id="nowPlayingThumb" src="https://via.placeholder.com/56" class="w-14 h-14 rounded object-cover bg-[#282828] shadow-md flex-shrink-0">
       <div class="overflow-hidden">
         <p id="nowPlayingTitle" class="text-sm font-bold text-white truncate hover:underline cursor-pointer">Selecciona una canción</p>
-        <p id="nowPlayingArtist" class="text-xs text-[#b3b3b3] truncate hover:underline cursor-pointer">Metrolist Web</p>
+        <p id="nowPlayingArtist" class="text-xs text-[#b3b3b3] truncate hover:underline cursor-pointer">KILLFLY Web</p>
       </div>
       <button id="btnLikeCurrent" title="Guardar en Tus Me gusta" class="p-2 text-[#b3b3b3] hover:text-white transition active:scale-90 ml-1">
         <svg id="heartIconCurrent" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>

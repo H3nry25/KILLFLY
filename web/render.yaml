@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: metrolist-web
+    name: killfly-web
     env: node
     plan: free
     rootDir: web

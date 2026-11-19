@@ -1,4 +1,4 @@
-// Metrolist Web Player Engine
+// KILLFLY Web Player Engine (Spotify Clone)
 
 let state = {
   currentSong: null,
@@ -153,6 +153,7 @@ function switchView(viewName) {
 
 navHome.addEventListener('click', () => switchView('home'));
 navSearch.addEventListener('click', () => switchView('search'));
+navLibrary.addEventListener('click', () => openPlaylistView('liked'));
 likedPlaylistTile.addEventListener('click', () => openPlaylistView('liked'));
 
 // 3. Search Engine
@@ -427,10 +428,25 @@ function formatTime(sec) {
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-// Volume
+// Volume & Mute
+let previousVolume = 0.8;
+const btnMute = document.getElementById('btnMute');
 volumeSlider.addEventListener('input', (e) => {
   audio.volume = e.target.value / 100;
+  if (audio.volume > 0) previousVolume = audio.volume;
 });
+if (btnMute) {
+  btnMute.addEventListener('click', () => {
+    if (audio.volume > 0) {
+      previousVolume = audio.volume;
+      audio.volume = 0;
+      volumeSlider.value = 0;
+    } else {
+      audio.volume = previousVolume || 0.8;
+      volumeSlider.value = (previousVolume || 0.8) * 100;
+    }
+  });
+}
 
 // Like / Heart Controller
 function updateHeartState() {

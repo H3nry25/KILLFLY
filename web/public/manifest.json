@@ -1,21 +1,16 @@
 {
-  "name": "Metrolist Web",
-  "short_name": "Metrolist",
+  "name": "KILLFLY Web",
+  "short_name": "KILLFLY",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b0d0e",
-  "theme_color": "#121316",
-  "description": "Reproductor de música Metrolist para iPhone y Web con sincronización en Google Drive",
+  "background_color": "#000000",
+  "theme_color": "#1ed760",
+  "description": "KILLFLY - Premium Web Music Player",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/H3nry25/APPSPO/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231ed760'><path d='M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.793-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.722 1.115.294.18.386.562.207.855zm1.226-2.732c-.227.37-.714.484-1.083.256-2.69-1.653-6.79-2.134-9.972-1.168-.415.127-.86-.107-.986-.522-.127-.414.107-.86.522-.986 3.633-1.103 8.15-.568 11.264 1.338.37.228.484.715.255 1.082zm.106-2.835C14.692 8.95 9.081 8.766 5.82 9.756c-.494.15-1.022-.132-1.172-.626-.15-.494.132-1.022.626-1.172 3.755-1.14 9.957-.922 13.722 1.312.443.263.588.84.325 1.283-.263.443-.84.588-1.283.325z'/></svg>",
       "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "https://raw.githubusercontent.com/H3nry25/APPSPO/main/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml"
     }
   ]
 }
