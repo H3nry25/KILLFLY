@@ -249,68 +249,53 @@ app.post('/api/playlists/:id/songs', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUDIO STREAMING (via youtubei.js)
+// AUDIO STREAMING (via ytdl-core)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Innertube, UniversalCache } from 'youtubei.js';
-import ytdlCore from '@distube/ytdl-core';
+import { getInfo } from '@distube/ytdl-core';
 
-// Handle ESM/CommonJS interop for ytdl-core
-const Ytdl = ytdlCore?.Ytdl || ytdlCore?.default?.Ytdl;
-const chooseFormat = ytdlCore?.chooseFormat || ytdlCore?.default?.chooseFormat;
-const getInfo = ytdlCore?.getInfo || ytdlCore?.default?.getInfo;
-
-const ytdl = Ytdl ? new Ytdl() : null;
-let ytClient = null;
-
-async function getYtClient() {
-  if (!ytClient) {
-    ytClient = await Innertube.create({
-      cache: new UniversalCache(false),
-      generate_session_locally: true,
-    });
-    console.log('[Server] YouTube InnerTube client initialized');
-  }
-  return ytClient;
-}
-
-// Stream audio URL (converts YouTube video to audio stream)
+// Stream audio URL (direct YouTube audio stream)
 app.get('/api/stream/:videoId', async (req, res) => {
   const videoId = req.params.videoId;
   if (!videoId) return res.status(400).json({ error: 'videoId requerido' });
 
   try {
+    // Use ytdl-core's direct audio stream
     const info = await getInfo(videoId);
-    const format = chooseFormat(info.formats, {
-      filter: { hasAudio: true, hasVideo: false }
-    });
 
-    if (!format || !format.url) {
-      return res.status(404).json({ error: 'No se encontró stream de audio' });
+    // Find best audio format
+    let audioFormat = null;
+    if (info.formats && Array.isArray(info.formats)) {
+      audioFormat = info.formats
+        .filter(f => f.hasAudio && !f.hasVideo)
+        .sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0))[0];
     }
 
-    const rangeHeader = req.headers.range;
-    const fetchHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    };
-    if (rangeHeader) fetchHeaders['Range'] = rangeHeader;
+    if (!audioFormat?.url) {
+      // Fallback: try webm format
+      audioFormat = info.formats?.find(f => f.format === 'webm' && f.hasAudio);
+    }
 
-    const streamResponse = await fetch(format.url, { headers: fetchHeaders });
+    if (!audioFormat?.url) {
+      return res.status(404).json({
+        error: 'No se encontró stream de audio',
+        videoId
+      });
+    }
 
-    res.status(streamResponse.status);
-    streamResponse.headers.forEach((val, key) => {
-      const lower = key.toLowerCase();
-      if (['content-range', 'content-length', 'content-type', 'accept-ranges'].includes(lower)) {
-        res.setHeader(key, val);
+    // Stream the audio
+    const response = await fetch(audioFormat.url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
 
-    if (!res.getHeader('Content-Type')) {
-      res.setHeader('Content-Type', format.mimeType || 'audio/mp4');
-    }
+    res.status(200);
+    res.setHeader('Content-Type', audioFormat.mimeType || 'audio/mpeg');
     res.setHeader('Accept-Ranges', 'bytes');
 
-    const reader = streamResponse.body.getReader();
+    // Pipe the response
+    const reader = response.body.getReader();
     async function pump() {
       const { done, value } = await reader.read();
       if (done) return res.end();
@@ -320,7 +305,9 @@ app.get('/api/stream/:videoId', async (req, res) => {
     await pump();
   } catch (e) {
     console.error(`[Stream] Error streaming ${videoId}:`, e.message);
-    if (!res.headersSent) res.status(500).json({ error: e.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: e.message });
+    }
   }
 });
 
